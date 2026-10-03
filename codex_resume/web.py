@@ -58,7 +58,7 @@ function resumeCell(e,now){
  }}
 function row(e,now){const parked=['skipped','automation','max-attempts','weekly-guard'].includes(e.state);const id=esc(JSON.stringify(e.thread_id));
  return`<tr><td><b>${esc(e.cwd.split('/').pop())}</b><div class="ask" title="${esc(e.title)}">${esc(e.title)}</div></td>
- <td class="ask" title="${esc(e.last_user_message)}">${esc(e.last_user_message)}</td>
+ <td><div class="ask" title="${esc(e.last_user_message)}">${esc(e.last_user_message)}</div></td>
  <td>${fmtT(e.blocked_at)}<div class="reason">${rel(e.blocked_at,now)}</div></td>
  <td>${resumeCell(e,now)}${e.last_result?`<div class="reason" title="${esc(e.last_result)}">last run: ${esc(e.last_result)}</div>`:''}</td>
  <td><code>${esc(e.message)}</code><div class="reason">${esc(e.model||'thread default')} · ${esc(e.effort||'default effort')}</div></td>
