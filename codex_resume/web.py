@@ -16,7 +16,7 @@ h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:24px 0 8px;color:var(-
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--bar);vertical-align:top}
 th{color:var(--muted);font-weight:500}.ask{max-width:380px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .state{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:var(--bar)}
-.state.scheduled{background:#d1e9ff;color:#0a4a8a}.state.running{background:#d6f5de;color:#0b6b2a}.state.skipped,.state.max-attempts,.state.weekly-guard,.state.cooldown{opacity:.7}
+.state.scheduled{background:#d1e9ff;color:#0a4a8a}.state.running{background:#d6f5de;color:#0b6b2a}.state.skipped,.state.max-attempts,.state.weekly-guard,.state.cooldown,.state.automation{opacity:.7}
 .state.pending-in-app{background:#ffe8c2;color:#7a4a00}
 button{font:inherit;font-size:12px;padding:4px 10px;border-radius:8px;border:1px solid var(--bar);background:var(--card);color:var(--fg);cursor:pointer;margin-right:4px}
 button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}

@@ -117,3 +117,17 @@ class CooldownTest(unittest.TestCase):
         self.state.record_attempt("a", NOW - 30)
         plan = build_plan([blocked("a", NOW - 10)], limits(True), self.state, self.cfg, NOW)
         self.assertEqual(plan.entries[0].state, "scheduled")
+
+
+class AutomationTest(unittest.TestCase):
+    def test_heartbeat_automation_thread_is_not_auto_resumed(self):
+        with tempfile.TemporaryDirectory() as d:
+            state = State(Path(d) / "s.json")
+            hb = Blocked("h", "/p/x", "t", "<heartbeat>\n  <automation_id>schedule-x</automation_id>", 5, None, None, None, "vscode", "h-t")
+            plan = build_plan([hb, blocked("a", 10)], limits(True), state, Config(), NOW)
+            by = {e.thread_id: e for e in plan.entries}
+            self.assertEqual(by["h"].state, "automation")
+            self.assertEqual(plan.next_action.thread_id, "a")
+            state.set_resume_now("h", True)
+            plan = build_plan([hb], limits(True), state, Config(), NOW)
+            self.assertEqual(plan.next_action.thread_id, "h")
