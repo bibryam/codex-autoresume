@@ -119,7 +119,7 @@ class AutomationTest(unittest.TestCase):
     def test_heartbeat_automation_thread_is_not_auto_resumed(self):
         with tempfile.TemporaryDirectory() as d:
             state = State(Path(d) / "s.json")
-            hb = Blocked("h", "/p/x", "t", "<heartbeat>\n  <automation_id>schedule-x</automation_id>", 5, None, None, None, "vscode", "h-t")
+            hb = Blocked("h", "/p/x", "t", "continue", 5, None, None, None, "vscode", "h-t", is_automation=True)
             plan = build_plan([hb, blocked("a", 10)], limits(True), state, Config(), NOW)
             by = {e.thread_id: e for e in plan.entries}
             self.assertEqual(by["h"].state, "automation")

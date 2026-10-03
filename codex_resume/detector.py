@@ -19,9 +19,13 @@ class Blocked:
     effort: str | None
     source: str
     last_turn_id: str
+    is_automation: bool = False  # a scheduled heartbeat/automation posted into this thread recently
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+RECENT_USER_MESSAGES = 5
 
 
 def _ro(path: Path) -> sqlite3.Connection:
@@ -81,14 +85,16 @@ def find_blocked(codex_home: str, limit: int = 50) -> list[Blocked]:
             info, message = _error_info(turn[2])
             if info != "usageLimitExceeded":
                 continue
-            item = h.execute(
+            items = h.execute(
                 "select item_json from thread_items where thread_id=? and item_type='userMessage' "
-                "order by rollout_ordinal desc limit 1", (tid,)).fetchone()
+                "order by rollout_ordinal desc limit ?", (tid, RECENT_USER_MESSAGES)).fetchall()
+            texts = [_user_text(row[0]) for row in items]
             out.append(Blocked(
                 thread_id=tid, cwd=cwd or "", title=(title or first_msg or "").strip()[:200],
-                last_user_message=(_user_text(item[0]) if item else "")[:300],
+                last_user_message=(texts[0] if texts else "")[:300],
                 blocked_at=int(turn[4] or turn[3] or 0), reset_hint=message, model=model, effort=effort,
-                source=source or "", last_turn_id=turn[0]))
+                source=source or "", last_turn_id=turn[0],
+                is_automation=any(t.lstrip().startswith("<heartbeat>") for t in texts)))
     return out
 
 

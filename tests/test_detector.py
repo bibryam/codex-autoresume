@@ -86,3 +86,14 @@ class QueuedCountTest(unittest.TestCase):
             q.commit()
             self.assertEqual(queued_count(d, "t"), 2)
             self.assertEqual(queued_count(d, "zzz"), 0)
+
+
+class AutomationFlagTest(unittest.TestCase):
+    def test_heartbeat_anywhere_in_recent_user_messages_marks_automation(self):
+        with tempfile.TemporaryDirectory() as d:
+            make_home(d)
+            add_thread(d, "auto", [("completed", None, "<heartbeat>\n<automation_id>x</automation_id>"), ("failed", ERR, "continue")])
+            add_thread(d, "plain", [("completed", None, "do X"), ("failed", ERR, "continue")])
+            by = {b.thread_id: b for b in find_blocked(d)}
+            self.assertTrue(by["auto"].is_automation)
+            self.assertFalse(by["plain"].is_automation)
