@@ -5,12 +5,18 @@ so you do not have to come back and type "continue" yourself.
 
 ## Run it
 
-Background (recommended). Installs a launchd agent that starts at login and
-restarts if it crashes, then opens the page:
+Background (recommended):
 
     ./start.sh
 
-Stop and remove the background agent:
+This writes `~/Library/LaunchAgents/com.codex-resume.plist` and loads it with
+`launchctl`. macOS then starts the daemon at every login (including after a
+reboot) and restarts it if it crashes. That is the only change made to your
+machine; nothing is installed system-wide and no root is needed. The script
+also opens the page. Another user clones this folder and runs the same
+command.
+
+Stop the daemon and remove the launch agent again:
 
     ./stop.sh
 

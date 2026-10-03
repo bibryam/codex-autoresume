@@ -45,6 +45,7 @@ class Scheduler:
         self.limits: Limits | None = None
         self.limits_ok = False
         self.limits_at = 0
+        self.models: list[dict] = []
         self.blocked = []
         self.plan = Plan([], None, "")
         self.running: str | None = None
@@ -127,6 +128,8 @@ class Scheduler:
                 self.limits_at = now
                 self.limits_ok = True
                 self.engine_status = "ok"
+                if not self.models:
+                    self.models = self._read_models()
             except Exception as e:  # noqa: BLE001
                 self.engine_status = f"down: {str(e)[:120]}"
                 self.limits_ok = False  # stale limits never drive a delivery
@@ -149,6 +152,22 @@ class Scheduler:
             if nxt and self.running is None and not self.dry_run:
                 self._start_delivery(nxt)
         self.last_tick = now
+
+    def _read_models(self) -> list[dict]:
+        """Models the account can use, with their reasoning efforts (for the Edit form)."""
+        try:
+            res = self.engine().call("model/list", {}, timeout=30) or {}
+        except Exception as e:  # noqa: BLE001
+            self.log(f"model/list failed: {e}")
+            return []
+        out = []
+        for m in res.get("data") or []:
+            if m.get("hidden"):
+                continue
+            efforts = [e.get("reasoningEffort") if isinstance(e, dict) else e for e in m.get("supportedReasoningEfforts") or []]
+            out.append({"id": m.get("id") or m.get("model"), "display": m.get("displayName") or m.get("id"),
+                        "efforts": [e for e in efforts if e], "default_effort": m.get("defaultReasoningEffort")})
+        return out
 
     def _start_delivery(self, entry) -> None:
         now = int(self.clock())
@@ -230,6 +249,7 @@ class Scheduler:
                 "note": self.plan.note,
                 "entries": entries,
                 "running": self.running,
+                "models": self.models,
                 "history": self.state.history(50),
                 "log": self.log_lines[-30:],
                 "config": {"port": self.cfg.port, "weekly_guard": self.cfg.weekly_guard, "max_attempts": self.cfg.max_attempts,

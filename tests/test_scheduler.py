@@ -176,3 +176,22 @@ class ReviewFixesSchedulerTest(SchedulerTest):
         s.tick()
         self.done.wait(2); s.join_delivery(2)  # the cleared thread is delivered again; let it finish before teardown
         self.assertEqual(self.delivered, ["a", "a"])
+
+
+class ModelListTest(SchedulerTest):
+    def test_models_appear_in_snapshot(self):
+        class WithModels(FakeEngine):
+            def call(self, method, params=None, timeout=60):
+                if method == "model/list":
+                    return {"data": [
+                        {"id": "gpt-6-astra", "displayName": "GPT-6-Astra", "hidden": False, "defaultReasoningEffort": "low",
+                         "supportedReasoningEfforts": [{"reasoningEffort": "low"}, {"reasoningEffort": "xhigh"}]},
+                        {"id": "secret", "displayName": "Secret", "hidden": True, "supportedReasoningEfforts": []},
+                    ]}
+                return super().call(method, params, timeout)
+        s = self.make(WithModels(RL_BLOCKED))
+        s.tick()
+        models = s.snapshot()["models"]
+        self.assertEqual([m["id"] for m in models], ["gpt-6-astra"])
+        self.assertEqual(models[0]["efforts"], ["low", "xhigh"])
+        self.assertEqual(models[0]["default_effort"], "low")
