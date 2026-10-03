@@ -40,3 +40,12 @@ class StateTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p = Path(d) / "s.json"; p.write_text("{not json")
             self.assertEqual(State(p).history(), [])
+
+
+class ForceFlagTest(unittest.TestCase):
+    def test_force_roundtrip(self):
+        with tempfile.TemporaryDirectory() as d:
+            st = State(Path(d) / "s.json")
+            self.assertFalse(st.thread("t")["force"])
+            st.set_force("t", True)
+            self.assertTrue(State(Path(d) / "s.json").thread("t")["force"])

@@ -90,13 +90,13 @@ def build_plan(blocked: list[Blocked], limits: Limits | None, state: State, cfg:
             kind = "running"
         elif st["skip"]:
             kind = "skipped"
-        elif not st["resume_now"] and (b.is_automation or b.last_user_message.lstrip().startswith("<heartbeat>")):
+        elif not (st["resume_now"] or st["force"]) and (b.is_automation or b.last_user_message.lstrip().startswith("<heartbeat>")):
             kind = "automation"
             reason = "scheduled automation thread; it will run again on its own schedule"
         elif st["pending_in_app_at"]:
             kind = "pending-in-app"
             reason = "queued in the app; open the thread to start it"
-        elif not st["resume_now"] and attempts >= cfg.max_attempts:
+        elif not (st["resume_now"] or st["force"]) and attempts >= cfg.max_attempts:
             kind = "max-attempts"
             reason = f"{attempts} automatic resumes in 24h"
         elif not st["resume_now"] and in_cooldown:
@@ -105,7 +105,7 @@ def build_plan(blocked: list[Blocked], limits: Limits | None, state: State, cfg:
         elif not st["resume_now"] and failed_again and not fresh_window:
             kind = "waiting-reset"
             reason = "failed again on the usage limit after a resume; waiting for the next 5h window"
-        elif not st["resume_now"] and weekly >= cfg.weekly_guard:
+        elif not (st["resume_now"] or st["force"]) and weekly >= cfg.weekly_guard:
             kind = "weekly-guard"
             reason = f"weekly usage {weekly}% >= guard {cfg.weekly_guard}%"
         else:

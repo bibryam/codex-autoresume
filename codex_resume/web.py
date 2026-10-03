@@ -13,8 +13,12 @@ h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:24px 0 8px;color:var(-
 .gauge{display:grid;grid-template-columns:90px 1fr 300px;gap:12px;align-items:center;margin:8px 0}
 .bar{height:10px;background:var(--bar);border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
 .bar.warn i{background:var(--warn)}.bar.bad i{background:var(--bad)}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--bar);vertical-align:top}
-th{color:var(--muted);font-weight:500}#threads{overflow-x:auto}.ask{max-width:300px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--bar);vertical-align:top;overflow-wrap:anywhere}
+th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.03em}#threads{overflow-x:auto}
+.ask{color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.yes,.no,.run,.wait{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;margin-bottom:3px}
+.yes{background:#d6f5de;color:#0b6b2a}.run{background:#d1e9ff;color:#0a4a8a}.wait{background:#ffe8c2;color:#7a4a00}.no{background:var(--bar);color:var(--muted)}
+.when{font-weight:600}.reason{color:var(--muted);font-size:12px}button:disabled{opacity:.4;cursor:default}
 .state{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:var(--bar)}
 .state.scheduled{background:#d1e9ff;color:#0a4a8a}.state.running{background:#d6f5de;color:#0b6b2a}.state.skipped,.state.max-attempts,.state.weekly-guard,.state.cooldown,.state.automation{opacity:.7}
 .state.pending-in-app{background:#ffe8c2;color:#7a4a00}
@@ -38,14 +42,31 @@ const esc=t=>(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"
 async function post(p,b){await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):null});load()}
 function gauge(name,w,now){if(!w)return`<div class="gauge"><b>${name}</b><div class="bar"><i style="width:0"></i></div><span>unknown</span></div>`;
  const c=w.used_percent>=100?'bad':(w.used_percent>=80?'warn':'');return`<div class="gauge"><b>${name}</b><div class="bar ${c}"><i style="width:${Math.min(100,w.used_percent)}%"></i></div><span>${w.used_percent}% used · resets ${fmtT(w.resets_at)} (${rel(w.resets_at,now)})</span></div>`}
-function row(e,now){const when=e.state==='scheduled'?(e.position===1?fmtT(e.resume_at)+' <small>('+rel(e.resume_at,now)+')</small>':'after #'+(e.position-1)):(e.state==='running'?'running now':'');
+function resumeCell(e,now){
+ switch(e.state){
+  case 'running': return `<span class="run">Running now</span>`;
+  case 'scheduled': return e.position===1
+    ? `<span class="yes">Yes · #1</span><div class="when">${fmtT(e.resume_at)} <small>(${rel(e.resume_at,now)})</small></div><div class="reason">${esc(e.reason)}</div>`
+    : `<span class="yes">Yes · #${e.position}</span><div class="when">after #${e.position-1} finishes</div><div class="reason">${esc(e.reason)}</div>`;
+  case 'cooldown': case 'waiting-reset': return `<span class="wait">Yes · waiting</span><div class="reason">${esc(e.reason)}</div>`;
+  case 'pending-in-app': return `<span class="wait">Queued in the app</span><div class="reason">${esc(e.reason)}</div>`;
+  case 'skipped': return `<span class="no">No · skipped</span><div class="reason">press Schedule to put it back in the queue</div>`;
+  case 'automation': return `<span class="no">No · automation thread</span><div class="reason">${esc(e.reason)}. Press Schedule if you want it resumed anyway.</div>`;
+  case 'max-attempts': return `<span class="no">No · attempts used</span><div class="reason">${esc(e.reason)}. Press Schedule to allow one more.</div>`;
+  case 'weekly-guard': return `<span class="no">No · weekly guard</span><div class="reason">${esc(e.reason)}. Press Schedule to resume anyway.</div>`;
+  default: return `<span class="no">${esc(e.state)}</span><div class="reason">${esc(e.reason)}</div>`;
+ }}
+function row(e,now){const parked=['skipped','automation','max-attempts','weekly-guard'].includes(e.state);const id=esc(JSON.stringify(e.thread_id));
  return`<tr><td><b>${esc(e.cwd.split('/').pop())}</b><div class="ask" title="${esc(e.title)}">${esc(e.title)}</div></td>
- <td class="ask" title="${esc(e.last_user_message)}">${esc(e.last_user_message)}</td><td>${fmtT(e.blocked_at)}</td><td>${when}</td>
- <td><span class="state ${e.state}">${e.state}${e.position&&e.state==='scheduled'?' #'+e.position:''}</span><div class="ask" title="${esc(e.reason)}">${esc(e.reason)}</div>${e.last_result?`<div class="ask" title="${esc(e.last_result)}">last: ${esc(e.last_result)}</div>`:''}</td>
- <td><code>${esc(e.message)}</code><div class="ask">${esc(e.model||'')} ${esc(e.effort||'')}</div></td>
- <td style="white-space:nowrap">${e.state==='skipped'?`<button onclick="post('/api/threads/${e.thread_id}/unskip')">Unskip</button>`:`<button class="danger" onclick="post('/api/threads/${e.thread_id}/skip')">Skip</button>`}
- <button class="primary" onclick="post('/api/threads/${e.thread_id}/resume-now')">Now</button>
- <button onclick="startEdit(${esc(JSON.stringify(e.thread_id))})">${editing===e.thread_id?'Close':'Edit'}</button></td></tr>${editing===e.thread_id?editRow(e):''}`}
+ <td class="ask" title="${esc(e.last_user_message)}">${esc(e.last_user_message)}</td>
+ <td>${fmtT(e.blocked_at)}<div class="reason">${rel(e.blocked_at,now)}</div></td>
+ <td>${resumeCell(e,now)}${e.last_result?`<div class="reason" title="${esc(e.last_result)}">last run: ${esc(e.last_result)}</div>`:''}</td>
+ <td><code>${esc(e.message)}</code><div class="reason">${esc(e.model||'thread default')} · ${esc(e.effort||'default effort')}</div></td>
+ <td style="white-space:nowrap">${parked
+   ? `<button class="primary" onclick="post('/api/threads/${e.thread_id}/schedule')">Schedule</button><button disabled title="already not resuming">Skip</button>`
+   : `<button class="danger" onclick="post('/api/threads/${e.thread_id}/skip')">Skip</button>`}
+ <button onclick="post('/api/threads/${e.thread_id}/resume-now')" title="resume immediately, ignoring the window and guards">Now</button>
+ <button onclick="startEdit(${id})">${editing===e.thread_id?'Close':'Edit'}</button></td></tr>${editing===e.thread_id?editRow(e):''}`}
 let editing=null;
 function startEdit(id){editing=(editing===id)?null:id;load(true)}
 let MODELS=[];
@@ -54,7 +75,7 @@ function modelOptions(sel){const ids=MODELS.map(m=>m.id);const extra=sel&&!ids.i
 function effortOptions(modelId,sel){const m=MODELS.find(x=>x.id===modelId);let efforts=m&&m.efforts.length?m.efforts.slice():['low','medium','high','xhigh','max','ultra'];
  if(sel&&!efforts.includes(sel))efforts.unshift(sel);return efforts.map(x=>`<option value="${esc(x)}" ${x===sel?'selected':''}>${esc(x)}</option>`).join('')}
 function onModelChange(selEl){const form=selEl.form;const m=MODELS.find(x=>x.id===selEl.value);form.effort.innerHTML=effortOptions(selEl.value,m?m.default_effort:form.effort.value)}
-function editRow(e){return`<tr class="editrow"><td colspan="7"><form class="editform" onsubmit="return saveEdit(event,${esc(JSON.stringify(e.thread_id))})">
+function editRow(e){return`<tr class="editrow"><td colspan="6"><form class="editform" onsubmit="return saveEdit(event,${esc(JSON.stringify(e.thread_id))})">
  <div><label>Message sent when resuming</label><textarea name="message" required>${esc(e.message)}</textarea></div>
  <div><label>Model (thread: ${esc(e.model||'default')})</label><select name="model" onchange="onModelChange(this)">${modelOptions(e.model)}</select></div>
  <div><label>Reasoning effort (thread: ${esc(e.effort||'default')})</label><select name="effort">${effortOptions(e.model,e.effort)}</select></div>
@@ -64,7 +85,7 @@ async function saveEdit(ev,id){ev.preventDefault();const f=new FormData(ev.targe
 async function load(force){if(editing&&!force)return;try{const s=await(await fetch('/api/state')).json();const now=s.now;MODELS=s.models||[];
  document.getElementById('sub').textContent=`engine: ${s.engine} · updated ${new Date().toLocaleTimeString()} · ${s.config.approvals} approvals · weekly guard ${s.config.weekly_guard}% · max ${s.config.max_attempts}/day${s.note?' · '+s.note:''}`;
  const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${L.plan||'?'} · read ${fmtT(L.fetched_at)}${s.limits_stale?' · STALE (engine down)':''}</div>`;
- document.getElementById('threads').innerHTML=s.entries.length?`<table><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Resume at</th><th>State</th><th>Message</th><th></th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
+ document.getElementById('threads').innerHTML=s.entries.length?`<table><colgroup><col style="width:20%"><col style="width:22%"><col style="width:10%"><col style="width:24%"><col style="width:12%"><col style="width:12%"></colgroup><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Will it resume?</th><th>Message · model</th><th>Actions</th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
  document.getElementById('history').textContent=s.history.map(h=>`${fmtT(h.ts)}  ${(h.thread_id||'').slice(0,13).padEnd(13)}  ${h.event.padEnd(18)} ${h.detail||''}`).join('\n')||'nothing yet';
  document.getElementById('log').textContent=(s.log||[]).join('\n');}catch(e){document.getElementById('sub').textContent='daemon unreachable: '+e}}
 load();setInterval(load,10000);
@@ -129,6 +150,8 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
                 scheduler.set_skip(tid, True)
             elif action == "unskip":
                 scheduler.set_skip(tid, False)
+            elif action == "schedule":
+                scheduler.schedule(tid)
             elif action == "resume-now":
                 scheduler.resume_now(tid)
             elif action == "message":

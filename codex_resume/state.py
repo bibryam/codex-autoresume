@@ -6,7 +6,7 @@ from pathlib import Path
 
 HISTORY_CAP = 200
 _DEFAULT_THREAD = {"skip": False, "message": None, "model": None, "effort": None, "attempts": [],
-                   "resume_now": False, "pending_in_app_at": None, "pending_turn_id": None, "last_result": None}
+                   "resume_now": False, "pending_in_app_at": None, "pending_turn_id": None, "last_result": None, "force": False}
 
 
 class State:
@@ -47,6 +47,10 @@ class State:
 
     def set_message(self, tid: str, message: str | None, model: str | None = None, effort: str | None = None) -> None:
         self._set(tid, message=message or None, model=model or None, effort=effort or None)
+
+    def set_force(self, tid: str, flag: bool) -> None:
+        """Schedule anyway: ignore the automation rule and the attempt/weekly guards for this thread."""
+        self._set(tid, force=bool(flag))
 
     def set_resume_now(self, tid: str, flag: bool) -> None:
         self._set(tid, resume_now=bool(flag))

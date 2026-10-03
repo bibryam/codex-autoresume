@@ -11,6 +11,7 @@ class FakeScheduler:
     def snapshot(self):
         return {"now": 1, "engine": "ok", "limits": None, "note": "", "entries": [], "running": None, "history": [], "log": [], "config": {}}
     def set_skip(self, tid, flag): self.calls.append(("skip", tid, flag))
+    def schedule(self, tid): self.calls.append(("schedule", tid))
     def set_message(self, tid, message, model=None, effort=None): self.calls.append(("message", tid, message, model, effort))
     def resume_now(self, tid): self.calls.append(("now", tid))
 
@@ -41,7 +42,8 @@ class WebTest(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/threads/t1/skip")[0], 200)
         self.assertEqual(self.req("POST", "/api/threads/t1/unskip")[0], 200)
         self.assertEqual(self.req("POST", "/api/threads/t1/resume-now")[0], 200)
-        self.assertEqual(self.sched.calls, [("skip", "t1", True), ("skip", "t1", False), ("now", "t1")])
+        self.assertEqual(self.req("POST", "/api/threads/t1/schedule")[0], 200)
+        self.assertEqual(self.sched.calls, [("skip", "t1", True), ("skip", "t1", False), ("now", "t1"), ("schedule", "t1")])
 
     def test_post_message_roundtrip(self):
         msg = 'say "hi" — ünï'

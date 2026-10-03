@@ -98,6 +98,18 @@ class SchedulerTest(unittest.TestCase):
         s.resume_now("b"); self.assertTrue(self.done.wait(2)); s.join_delivery(2)
         self.assertEqual(self.delivered, ["b"])
 
+    def test_schedule_action_unparks_an_automation_thread(self):
+        self.blocked = [Blocked("h", "/p/x", "title", "continue", 10, "try again at 1:56 PM.", "gpt-6-astra", "xhigh", "vscode", "h-t", is_automation=True)]
+        s = self.make(FakeEngine(RL_BLOCKED))
+        s.tick()
+        self.assertEqual(s.snapshot()["entries"][0]["state"], "automation")
+        s.schedule("h")
+        self.assertEqual(s.snapshot()["entries"][0]["state"], "scheduled")
+        s.set_skip("h", True)
+        self.assertEqual(s.snapshot()["entries"][0]["state"], "skipped")
+        s.schedule("h")
+        self.assertEqual(s.snapshot()["entries"][0]["state"], "scheduled")
+
     def test_rate_limit_notification_updates_limits(self):
         s = self.make(FakeEngine(RL_BLOCKED))
         s.tick()

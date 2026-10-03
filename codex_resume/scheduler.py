@@ -215,6 +215,14 @@ class Scheduler:
         self.state.add_history(int(self.clock()), tid, "skip" if flag else "unskip")
         self._replan()
 
+    def schedule(self, tid: str) -> None:
+        """Put a parked thread into the normal queue (clears skip, overrides automation/guards)."""
+        self.state.set_skip(tid, False)
+        self.state.set_force(tid, True)
+        self.state.set_pending_in_app(tid, None)
+        self.state.add_history(int(self.clock()), tid, "schedule")
+        self._replan()
+
     def set_message(self, tid: str, message: str | None, model: str | None = None, effort: str | None = None) -> None:
         self.state.set_message(tid, message, model, effort)
         self._replan()

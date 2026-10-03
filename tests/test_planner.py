@@ -166,3 +166,30 @@ class ReviewFixesTest(unittest.TestCase):
         self.state.record_attempt("a", NOW - 30)
         plan = build_plan([blocked("a", NOW - 10)], limits(True), self.state, self.cfg, NOW)
         self.assertEqual(plan.entries[0].state, "cooldown")
+
+
+class ScheduleAnywayTest(unittest.TestCase):
+    """'Schedule' on a parked row: include it in the normal queue despite automation/guards, still waiting for the window."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = State(Path(self.tmp.name) / "s.json")
+        self.cfg = Config(grace_seconds=60, max_attempts=3, weekly_guard=90)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_force_overrides_automation_and_guards_but_not_the_window(self):
+        auto = Blocked("h", "/p/x", "t", "continue", 5, None, None, None, "vscode", "h-t", is_automation=True)
+        for ts in (NOW - 2000, NOW - 3000, NOW - 4000):  # 3 attempts today, outside the 10-min cooldown
+            self.state.record_attempt("m", ts)
+        self.state.set_force("h", True); self.state.set_force("m", True)
+        plan = build_plan([auto, blocked("m", 6)], limits(False, weekly=95), self.state, self.cfg, NOW)
+        self.assertEqual([e.state for e in plan.entries], ["scheduled", "scheduled"])
+        self.assertEqual(plan.entries[0].resume_at, NOW + 3600 + 60)
+        self.assertIsNone(plan.next_action)  # window still closed
+
+    def test_skip_wins_over_force(self):
+        self.state.set_force("a", True); self.state.set_skip("a", True)
+        plan = build_plan([blocked("a", 1)], limits(True), self.state, self.cfg, NOW)
+        self.assertEqual(plan.entries[0].state, "skipped")
