@@ -90,3 +90,16 @@ def find_blocked(codex_home: str, limit: int = 50) -> list[Blocked]:
                 blocked_at=int(turn[4] or turn[3] or 0), reset_hint=message, model=model, effort=effort,
                 source=source or "", last_turn_id=turn[0]))
     return out
+
+
+def queued_count(codex_home: str, thread_id: str) -> int:
+    """Messages waiting in Codex's durable queue (written by `codex queue`) for this thread."""
+    qdb = Path(codex_home) / "queue_1.sqlite"
+    if not qdb.exists():
+        return 0
+    try:
+        with _ro(qdb) as q:
+            row = q.execute("select count(*) from queued_items where thread_id=?", (thread_id,)).fetchone()
+        return int(row[0]) if row else 0
+    except sqlite3.Error:
+        return 0

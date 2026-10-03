@@ -42,13 +42,13 @@ function row(e,now){const when=e.state==='scheduled'?(e.position===1?fmtT(e.resu
  <td><code>${esc(e.message)}</code><div class="ask">${esc(e.model||'')} ${esc(e.effort||'')}</div></td>
  <td style="white-space:nowrap">${e.state==='skipped'?`<button onclick="post('/api/threads/${e.thread_id}/unskip')">Unskip</button>`:`<button onclick="post('/api/threads/${e.thread_id}/skip')">Skip</button>`}
  <button class="primary" onclick="post('/api/threads/${e.thread_id}/resume-now')">Now</button>
- <button onclick="editMsg('${e.thread_id}',${JSON.stringify(e.message)},${JSON.stringify(e.model||'')},${JSON.stringify(e.effort||'')})">Edit</button></td></tr>`}
-function editMsg(id,msg,model,effort){const m=prompt('Message to send when resuming:',msg);if(m===null)return;
+ <button onclick="editMsg(${esc(JSON.stringify([e.thread_id,e.message,e.model||'',e.effort||'']))})">Edit</button></td></tr>`}
+function editMsg(args){const [id,msg,model,effort]=args;const m=prompt('Message to send when resuming:',msg);if(m===null)return;
  const me=prompt('Model/effort (blank keeps thread defaults), e.g. gpt-6-astra/xhigh:',model?model+'/'+(effort||''):'');if(me===null)return;
  const [mo,ef]=me.split('/');post('/api/threads/'+id+'/message',{message:m,model:mo||null,effort:ef||null})}
 async function load(){try{const s=await(await fetch('/api/state')).json();const now=s.now;
  document.getElementById('sub').textContent=`engine: ${s.engine} · updated ${new Date().toLocaleTimeString()} · ${s.config.approvals} approvals · weekly guard ${s.config.weekly_guard}% · max ${s.config.max_attempts}/day${s.note?' · '+s.note:''}`;
- const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${L.plan||'?'} · read ${fmtT(L.fetched_at)}</div>`;
+ const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${L.plan||'?'} · read ${fmtT(L.fetched_at)}${s.limits_stale?' · STALE (engine down)':''}</div>`;
  document.getElementById('threads').innerHTML=s.entries.length?`<table><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Resume at</th><th>State</th><th>Message</th><th></th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
  document.getElementById('history').textContent=s.history.map(h=>`${fmtT(h.ts)}  ${(h.thread_id||'').slice(0,13).padEnd(13)}  ${h.event.padEnd(18)} ${h.detail||''}`).join('\n')||'nothing yet';
  document.getElementById('log').textContent=(s.log||[]).join('\n');}catch(e){document.getElementById('sub').textContent='daemon unreachable: '+e}}
@@ -74,7 +74,16 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
         def _json(self, status: int, obj) -> None:
             self._send(status, json.dumps(obj).encode("utf-8"), "application/json; charset=utf-8")
 
+        def _host_ok(self) -> bool:
+            host = (self.headers.get("Host") or "").split(":")[0].strip("[]").lower()
+            if host not in ("127.0.0.1", "localhost", "::1"):
+                self._json(403, {"error": "forbidden host"})
+                return False
+            return True
+
         def do_GET(self):
+            if not self._host_ok():
+                return
             if self.path == "/" or self.path.startswith("/?"):
                 self._send(200, PAGE.encode("utf-8"), "text/html; charset=utf-8")
             elif self.path == "/api/state":
@@ -83,11 +92,23 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
                 self._json(404, {"error": "not found"})
 
         def do_POST(self):
+            if not self._host_ok():
+                return
+            if not (self.headers.get("Content-Type") or "").lower().startswith("application/json"):
+                return self._json(415, {"error": "application/json required"})
             parts = self.path.strip("/").split("/")
             if len(parts) != 4 or parts[:2] != ["api", "threads"]:
                 return self._json(404, {"error": "not found"})
             tid, action = parts[2], parts[3]
-            length = int(self.headers.get("Content-Length") or 0)
+            known = getattr(scheduler, "known_threads", lambda: None)()
+            if known is not None and tid not in known:
+                return self._json(404, {"error": "unknown thread"})
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if length < 0 or length > 65536:
+                return self._json(400, {"error": "bad content length"})
             raw = self.rfile.read(length) if length else b""
             if action == "skip":
                 scheduler.set_skip(tid, True)

@@ -112,3 +112,67 @@ class SchedulerTest(unittest.TestCase):
         self.engine.on_notification("turn/completed", {"threadId": "a", "turn": {"id": "x", "status": "completed"}})
         self.assertEqual(w.wait(1)["status"], "completed")
         self.assertIsNone(s.begin_watch("zzz").wait(0.01))
+
+
+class ReviewFixesSchedulerTest(SchedulerTest):
+    def test_c1_limits_failure_during_delivery_keeps_engine(self):
+        flaky = FakeEngine(RL_OPEN)
+        block = threading.Event()
+        def deliverer(cfg, eng, entry, begin_watch, log, **kw):
+            self.delivered.append(entry.thread_id); self.done.set(); block.wait(5); return Outcome("engine", True, "ok", "completed", None)
+        def factory(on_notification, on_server_request):
+            flaky.on_notification = on_notification; return flaky
+        s = Scheduler(self.cfg, self.state, notifier=lambda t, x: None, engine_factory=factory,
+                      clock=lambda: self.clock[0], finder=lambda home: self.blocked, deliverer=deliverer)
+        s.tick(); self.assertTrue(self.done.wait(2))
+        # next limits read fails while the worker is still delivering
+        flaky.limits = None
+        def boom(method, params=None, timeout=60): raise RuntimeError("timeout")
+        flaky.call = boom
+        self.clock[0] += 400
+        s.tick()
+        self.assertEqual(flaky.stopped, 0, "engine must not be reset while a delivery runs")
+        self.assertTrue(s.snapshot()["engine"].startswith("down"))
+        block.set(); s.join_delivery(2)
+
+    def test_c1_engine_exit_releases_watch(self):
+        s = self.make(FakeEngine(RL_BLOCKED))
+        s.tick()
+        w = s.begin_watch("a")
+        s._on_engine_exit()
+        turn = w.wait(1)
+        self.assertEqual(turn["status"], "failed")
+        self.assertIn("engine exited", turn["error"]["message"])
+
+    def test_c3_dry_run_never_delivers(self):
+        s = self.make(FakeEngine(RL_OPEN))
+        s.dry_run = True
+        s.tick()
+        self.assertFalse(self.done.wait(0.3))
+        self.assertEqual(self.delivered, [])
+        self.assertEqual(s.snapshot()["entries"][0]["state"], "scheduled")
+
+    def test_i4_stale_limits_after_read_failure_do_not_deliver(self):
+        eng = FakeEngine(RL_OPEN)
+        s = self.make(eng, outcome=Outcome("engine", True, "ok", "completed", None))
+        s.tick(); self.assertTrue(self.done.wait(2)); s.join_delivery(2); self.done.clear()
+        self.delivered.clear()
+        def boom(method, params=None, timeout=60): raise RuntimeError("gone")
+        eng.call = boom
+        self.clock[0] += 400
+        s.tick()
+        self.assertFalse(self.done.wait(0.3))
+        self.assertEqual(self.delivered, [])
+        self.assertIn("unavailable", s.snapshot()["note"])
+
+    def test_i5_pending_in_app_clears_when_a_newer_turn_failed(self):
+        s = self.make(FakeEngine(RL_OPEN), outcome=Outcome("pending-in-app", False, "queued"))
+        s.tick(); self.assertTrue(self.done.wait(2)); s.join_delivery(2)
+        self.assertEqual(s.snapshot()["entries"][0]["state"], "pending-in-app")
+        # the desktop drained the queue and that turn failed again on the limit: detector shows a new turn id
+        self.blocked[0] = Blocked("a", "/p/x", "title", "continue", 10, "try again at 1:56 PM.", "gpt-6-astra", "xhigh", "vscode", "a-newturn")
+        self.clock[0] += 700
+        self.done.clear()
+        s.tick()
+        self.done.wait(2); s.join_delivery(2)  # the cleared thread is delivered again; let it finish before teardown
+        self.assertEqual(self.delivered, ["a", "a"])

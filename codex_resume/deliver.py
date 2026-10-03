@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .config import Config
-from .detector import latest_turn
+from .detector import latest_turn, queued_count
 from .engine import EngineError
 from .planner import Entry
 
@@ -58,10 +58,13 @@ def _outcome_from_turn(mode: str, turn: dict) -> Outcome:
     return Outcome(mode, status == "completed", str(detail)[:300], status, err.get("codexErrorInfo"))
 
 
-def _deliver_via_desktop(cfg: Config, entry: Entry, log, sleep, now, latest, queue) -> Outcome:
+def _deliver_via_desktop(cfg: Config, entry: Entry, log, sleep, now, latest, queue, already_queued: int) -> Outcome:
     before = latest(cfg.codex_home, entry.thread_id)
-    queue(cfg, entry.thread_id, entry.message)
-    log(f"queued {entry.message!r} for the desktop engine (thread {entry.thread_id[:13]})")
+    if already_queued:
+        log(f"{already_queued} message(s) already queued for thread {entry.thread_id[:13]}; not queueing again")
+    else:
+        queue(cfg, entry.thread_id, entry.message)
+        log(f"queued {entry.message!r} for the desktop engine (thread {entry.thread_id[:13]})")
     deadline = now() + cfg.desktop_wait_seconds
     while now() < deadline:
         sleep(5)
@@ -78,18 +81,22 @@ def _deliver_via_desktop(cfg: Config, entry: Entry, log, sleep, now, latest, que
 
 
 def deliver(cfg: Config, engine, entry: Entry, begin_watch: Callable[[str], object], log: Callable[[str], None],
-            sleep=time.sleep, now=time.time, latest=latest_turn, queue=queue_message) -> Outcome:
+            sleep=time.sleep, now=time.time, latest=latest_turn, queue=queue_message, queued=queued_count) -> Outcome:
+    already_queued = queued(cfg.codex_home, entry.thread_id)
+    watch = begin_watch(entry.thread_id)  # registered before resume: a queued message starts a turn on resume
     try:
         engine.call("thread/resume", _resume_params(cfg, entry), timeout=180)
     except EngineError as e:
         if ACTIVE_WRITER in e.message:
-            return _deliver_via_desktop(cfg, entry, log, sleep, now, latest, queue)
+            return _deliver_via_desktop(cfg, entry, log, sleep, now, latest, queue, already_queued)
         return Outcome("error", False, f"thread/resume failed: {e.message}")
     try:
-        watch = begin_watch(entry.thread_id)
-        res = engine.call("turn/start", _turn_params(cfg, entry), timeout=180) or {}
-        turn_id = (res.get("turn") or {}).get("id", "?")
-        log(f"turn {str(turn_id)[:13]} started in our engine for thread {entry.thread_id[:13]}")
+        if already_queued:
+            log(f"thread {entry.thread_id[:13]} resumed; its {already_queued} queued message(s) start the turn")
+        else:
+            res = engine.call("turn/start", _turn_params(cfg, entry), timeout=180) or {}
+            turn_id = (res.get("turn") or {}).get("id", "?")
+            log(f"turn {str(turn_id)[:13]} started in our engine for thread {entry.thread_id[:13]}")
         turn = watch.wait(cfg.turn_timeout_seconds)
         if turn is None:
             return Outcome("engine", False, "timed out waiting for turn/completed")

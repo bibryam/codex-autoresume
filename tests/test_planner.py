@@ -113,10 +113,6 @@ class CooldownTest(unittest.TestCase):
         self.assertEqual(plan.entries[0].state, "scheduled")
         self.assertEqual(plan.next_action.thread_id, "a")
 
-    def test_new_failure_after_attempt_is_not_cooldown(self):
-        self.state.record_attempt("a", NOW - 30)
-        plan = build_plan([blocked("a", NOW - 10)], limits(True), self.state, self.cfg, NOW)
-        self.assertEqual(plan.entries[0].state, "scheduled")
 
 
 class AutomationTest(unittest.TestCase):
@@ -131,3 +127,42 @@ class AutomationTest(unittest.TestCase):
             state.set_resume_now("h", True)
             plan = build_plan([hb], limits(True), state, Config(), NOW)
             self.assertEqual(plan.next_action.thread_id, "h")
+
+
+class ReviewFixesTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = State(Path(self.tmp.name) / "s.json")
+        self.cfg = Config(grace_seconds=60, retry_cooldown_seconds=600)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_c2_reset_passed_but_flag_still_false_delivers_when_limits_are_fresh(self):
+        lim = Limits(Window(100, NOW - 120, 300), Window(20, NOW + 99999, 10080), False, "plus", fetched_at=NOW - 10)
+        plan = build_plan([blocked("a", NOW - 5000)], lim, self.state, self.cfg, NOW)
+        self.assertEqual(plan.next_action.thread_id, "a")
+
+    def test_c2_stale_limits_do_not_deliver_and_note_explains(self):
+        lim = Limits(Window(100, NOW - 120, 300), Window(20, NOW + 99999, 10080), False, "plus", fetched_at=NOW - 400)
+        plan = build_plan([blocked("a", NOW - 5000)], lim, self.state, self.cfg, NOW)
+        self.assertIsNone(plan.next_action)
+        self.assertIn("not allowed", plan.note)
+
+    def test_i3_failed_again_waits_for_a_fresh_window(self):
+        # we attempted at NOW-700, it failed again at NOW-650; limits still say allowed with the same window
+        self.state.record_attempt("a", NOW - 700)
+        same_window = Limits(Window(100, NOW + 3600, 300), Window(20, NOW + 99999, 10080), True, "plus", NOW)
+        plan = build_plan([blocked("a", NOW - 650)], same_window, self.state, self.cfg, NOW)
+        self.assertEqual(plan.entries[0].state, "waiting-reset")
+        self.assertIsNone(plan.next_action)
+        # a window that started after the failure clears the hold
+        fresh = Limits(Window(1, NOW - 600 + 18000, 300), Window(20, NOW + 99999, 10080), True, "plus", NOW)
+        plan = build_plan([blocked("a", NOW - 650)], fresh, self.state, self.cfg, NOW)
+        self.assertEqual(plan.entries[0].state, "scheduled")
+        self.assertEqual(plan.next_action.thread_id, "a")
+
+    def test_i3_any_recent_attempt_is_cooldown(self):
+        self.state.record_attempt("a", NOW - 30)
+        plan = build_plan([blocked("a", NOW - 10)], limits(True), self.state, self.cfg, NOW)
+        self.assertEqual(plan.entries[0].state, "cooldown")

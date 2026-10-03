@@ -117,3 +117,28 @@ class DeliverTest(unittest.TestCase):
             return type("R", (), {"returncode": 1, "stdout": "", "stderr": "no such thread"})()
         with self.assertRaises(RuntimeError):
             queue_message(self.cfg, "t", "x", runner=runner)
+
+
+class QueuedThreadTest(unittest.TestCase):
+    """I2: when a message is already queued for the thread, resuming drains it; never also turn/start."""
+
+    def setUp(self):
+        self.cfg = Config(codex_bin="/bin/echo", codex_home="/nonexistent", desktop_wait_seconds=20)
+
+    def test_resume_only_when_queue_has_message(self):
+        eng = FakeEngine()
+        watch = Watch({"id": "q-turn", "status": "completed"})
+        out = deliver(self.cfg, eng, entry(), lambda tid: watch, lambda m: None, queued=lambda home, tid: 1)
+        self.assertEqual((out.mode, out.ok), ("engine", True))
+        self.assertEqual([m for m, _ in eng.calls], ["thread/resume", "thread/unsubscribe"])
+
+    def test_desktop_path_does_not_queue_twice(self):
+        eng = FakeEngine(resume_error="thread t1 already has an active writer")
+        queued = []
+        clock = [1000.0]
+        out = deliver(self.cfg, eng, entry(), lambda tid: Watch(None), lambda m: None,
+                      sleep=lambda s: clock.__setitem__(0, clock[0] + s), now=lambda: clock[0],
+                      latest=lambda home, tid: ("old", "failed", 1, 2, "usageLimitExceeded"),
+                      queue=lambda cfg, tid, msg: queued.append(msg) or "ok", queued=lambda home, tid: 1)
+        self.assertEqual(out.mode, "pending-in-app")
+        self.assertEqual(queued, [])

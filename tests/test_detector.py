@@ -71,3 +71,18 @@ class DetectorTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(find_blocked(d), [])
             self.assertIsNone(latest_turn(d, "t"))
+
+
+class QueuedCountTest(unittest.TestCase):
+    def test_counts_queue_rows_for_thread(self):
+        from codex_resume.detector import queued_count
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(queued_count(d, "t"), 0)  # no db yet
+            q = sqlite3.connect(Path(d) / "queue_1.sqlite")
+            q.execute("create table queued_items (id text primary key, thread_id text, payload_json text, queue_order int, created_at_ms int, updated_at_ms int)")
+            q.execute("insert into queued_items values ('1','t','{}',0,1,1)")
+            q.execute("insert into queued_items values ('2','t','{}',1,1,1)")
+            q.execute("insert into queued_items values ('3','u','{}',0,1,1)")
+            q.commit()
+            self.assertEqual(queued_count(d, "t"), 2)
+            self.assertEqual(queued_count(d, "zzz"), 0)

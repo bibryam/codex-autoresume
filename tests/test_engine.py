@@ -50,3 +50,14 @@ class EngineTest(unittest.TestCase):
         time.sleep(0.3)
         with self.assertRaises(EngineError):
             self.eng.call("echo", {}, timeout=1)
+
+
+class EngineExitTest(unittest.TestCase):
+    def test_on_exit_called_when_process_ends(self):
+        exits = []
+        eng = FakeBinEngine("unused", on_exit=lambda: exits.append(True))
+        eng.start()
+        eng.notify("exit", {})
+        time.sleep(0.5)
+        self.assertEqual(exits, [True])
+        eng.stop()

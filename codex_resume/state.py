@@ -6,7 +6,7 @@ from pathlib import Path
 
 HISTORY_CAP = 200
 _DEFAULT_THREAD = {"skip": False, "message": None, "model": None, "effort": None, "attempts": [],
-                   "resume_now": False, "pending_in_app_at": None, "last_result": None}
+                   "resume_now": False, "pending_in_app_at": None, "pending_turn_id": None, "last_result": None}
 
 
 class State:
@@ -51,8 +51,8 @@ class State:
     def set_resume_now(self, tid: str, flag: bool) -> None:
         self._set(tid, resume_now=bool(flag))
 
-    def set_pending_in_app(self, tid: str, ts: int | None) -> None:
-        self._set(tid, pending_in_app_at=ts)
+    def set_pending_in_app(self, tid: str, ts: int | None, turn_id: str | None = None) -> None:
+        self._set(tid, pending_in_app_at=ts, pending_turn_id=turn_id if ts else None)
 
     def set_last_result(self, tid: str, text: str | None) -> None:
         self._set(tid, last_result=text)

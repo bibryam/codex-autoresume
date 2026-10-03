@@ -1,6 +1,8 @@
 from __future__ import annotations
 import argparse
+import json
 import os
+import urllib.request
 import signal
 import subprocess
 import sys
@@ -38,7 +40,10 @@ def format_status(snap: dict) -> str:
     return "\n".join(lines)
 
 
-def build_plist(python: str, workdir: str, data_dir: str) -> str:
+DEFAULT_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
+
+
+def build_plist(python: str, workdir: str, data_dir: str, path: str = DEFAULT_PATH) -> str:
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -65,7 +70,7 @@ def build_plist(python: str, workdir: str, data_dir: str) -> str:
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin</string>
+        <string>{path}</string>
         <key>PYTHONUNBUFFERED</key>
         <string>1</string>
     </dict>
@@ -101,7 +106,14 @@ def cmd_run(cfg: Config) -> None:
 
 
 def cmd_status(cfg: Config) -> None:
-    sched = Scheduler(cfg, State(Path(cfg.data_dir) / "state.json"), notifier=lambda t, x: None)
+    """Read-only: ask the running daemon; fall back to a dry-run scheduler that never delivers."""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{cfg.port}/api/state", timeout=5) as r:
+            print(format_status(json.load(r)))
+            return
+    except Exception:  # noqa: BLE001
+        pass
+    sched = Scheduler(cfg, State(Path(cfg.data_dir) / "state.json"), notifier=lambda t, x: None, dry_run=True)
     sched.tick()
     print(format_status(sched.snapshot()))
     sched.stop()
@@ -111,7 +123,9 @@ def cmd_install(cfg: Config) -> None:
     Path(cfg.data_dir).mkdir(parents=True, exist_ok=True)
     p = _plist_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(build_plist(sys.executable, str(Path(__file__).resolve().parent.parent), cfg.data_dir))
+    extra = [d for d in os.environ.get("PATH", "").split(":") if d and d not in DEFAULT_PATH.split(":")]
+    path = ":".join(extra + DEFAULT_PATH.split(":"))
+    p.write_text(build_plist(sys.executable, str(Path(__file__).resolve().parent.parent), cfg.data_dir, path))
     uid = os.getuid()
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True)
     r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(p)], capture_output=True, text=True)

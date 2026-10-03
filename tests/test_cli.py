@@ -10,6 +10,10 @@ class CliTest(unittest.TestCase):
         self.assertIn("/data/daemon.log", p)
         self.assertIn("<key>KeepAlive</key>", p)
 
+    def test_plist_carries_install_time_path(self):
+        p = build_plist("/usr/bin/python3", "/work", "/data", path="/Users/me/.nvm/bin:/opt/homebrew/bin")
+        self.assertIn("<string>/Users/me/.nvm/bin:/opt/homebrew/bin</string>", p)
+
     def test_format_status(self):
         snap = {"now": 100, "engine": "ok", "note": "", "limits": {"primary": {"used_percent": 100, "resets_at": 160, "window_minutes": 300}, "secondary": {"used_percent": 20, "resets_at": 900, "window_minutes": 10080}, "allowed": False, "plan": "plus", "fetched_at": 100},
                 "entries": [{"thread_id": "01a0fe2e-7ce2-abc", "cwd": "/p/cleverplayhouse", "title": "T", "last_user_message": "make it so", "blocked_at": 50, "resume_at": 220, "state": "scheduled", "position": 1, "message": "continue", "model": "m", "effort": "e", "attempts": 0, "reason": "after reset"}],

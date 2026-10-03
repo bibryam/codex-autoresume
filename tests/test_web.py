@@ -5,6 +5,9 @@ from codex_resume.web import make_server
 class FakeScheduler:
     def __init__(self):
         self.calls = []
+        self.known = None
+    def known_threads(self):
+        return self.known
     def snapshot(self):
         return {"now": 1, "engine": "ok", "limits": None, "note": "", "entries": [], "running": None, "history": [], "log": [], "config": {}}
     def set_skip(self, tid, flag): self.calls.append(("skip", tid, flag))
@@ -50,3 +53,23 @@ class WebTest(unittest.TestCase):
         self.assertEqual(self.req("GET", "/nope")[0], 404)
         self.assertEqual(self.req("POST", "/api/threads/t1/explode")[0], 404)
         self.assertEqual(self.req("POST", "/api/threads/t1/message", None)[0], 400)
+
+
+class HardeningTest(WebTest):
+    def test_rejects_foreign_host_header(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("GET", "/api/state", headers={"Host": "evil.example:80"})
+        r = c.getresponse(); r.read(); c.close()
+        self.assertEqual(r.status, 403)
+
+    def test_post_requires_json_content_type(self):
+        c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
+        c.request("POST", "/api/threads/t1/skip", body="x", headers={"Content-Type": "text/plain"})
+        r = c.getresponse(); r.read(); c.close()
+        self.assertEqual(r.status, 415)
+        self.assertEqual(self.sched.calls, [])
+
+    def test_unknown_thread_id_is_rejected(self):
+        self.sched.known = {"t1"}
+        self.assertEqual(self.req("POST", "/api/threads/t1/skip")[0], 200)
+        self.assertEqual(self.req("POST", "/api/threads/nope/skip")[0], 404)

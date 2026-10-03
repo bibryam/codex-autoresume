@@ -2,6 +2,7 @@ from __future__ import annotations
 import itertools
 import json
 import subprocess
+import sys
 import threading
 from typing import Callable
 
@@ -23,10 +24,12 @@ class Engine:
 
     def __init__(self, codex_bin: str, client_name: str = "codex-resume",
                  on_notification: Notification | None = None,
-                 on_server_request: ServerRequest | None = None):
+                 on_server_request: ServerRequest | None = None,
+                 on_exit: Callable[[], None] | None = None):
         self.codex_bin = codex_bin
         self.client_name = client_name
         self.on_notification = on_notification
+        self.on_exit = on_exit
         self.on_server_request = on_server_request or self.default_server_request
         self.proc: subprocess.Popen | None = None
         self._ids = itertools.count(1)
@@ -39,7 +42,7 @@ class Engine:
 
     def start(self) -> None:
         self.proc = subprocess.Popen(self._command(), stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                     stderr=subprocess.DEVNULL, text=True, bufsize=1)
+                                     stderr=sys.stderr, text=True, bufsize=1)
         threading.Thread(target=self._read_loop, daemon=True, name="codex-engine-reader").start()
         self.call("initialize", {"clientInfo": {"name": self.client_name, "version": __version__}}, timeout=60)
         self.notify("initialized", {})
@@ -125,6 +128,11 @@ class Engine:
             for ev, slot in pending:
                 slot.append({"error": {"code": -2, "message": "engine exited"}})
                 ev.set()
+            if self.on_exit:
+                try:
+                    self.on_exit()
+                except Exception:  # noqa: BLE001
+                    pass
 
     def stop(self) -> None:
         if self.proc and self.proc.poll() is None:
