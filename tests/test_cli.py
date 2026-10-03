@@ -32,3 +32,14 @@ class SignalTest(unittest.TestCase):
         with self.assertRaises(KeyboardInterrupt):
             os.kill(os.getpid(), signal.SIGTERM)
             import time; time.sleep(0.2)
+
+
+class InstallPathTest(unittest.TestCase):
+    def test_install_path_keeps_user_dirs_and_drops_temp_shims(self):
+        from codex_resume.__main__ import install_path
+        env = "/var/folders/zz/T/cmux-cli-shims/ABC:/Users/me/.local/bin:/opt/homebrew/bin:/private/tmp/x:/usr/bin:/Users/me/.nvm/versions/node/v22/bin"
+        got = install_path(env)
+        self.assertEqual(got.split(":")[:2], ["/Users/me/.local/bin", "/Users/me/.nvm/versions/node/v22/bin"])
+        self.assertNotIn("/var/folders", got)
+        self.assertNotIn("/private/tmp", got)
+        self.assertTrue(got.endswith("/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"))

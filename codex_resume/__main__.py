@@ -85,6 +85,29 @@ def install_signal_handlers() -> None:
     signal.signal(signal.SIGTERM, _stop)
 
 
+def install_path(env_path: str) -> str:
+    """PATH for the launchd job: the user's real tool dirs first, then the defaults; temp shims dropped."""
+    defaults = DEFAULT_PATH.split(":")
+    extra = []
+    for d in env_path.split(":"):
+        if not d or d in defaults or d in extra:
+            continue
+        if d.startswith(("/var/folders", "/private/tmp", "/tmp", "/private/var/folders")):
+            continue
+        extra.append(d)
+    return ":".join(extra + defaults)
+
+
+def _wait_unloaded(uid: int, timeout: float = 15.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        r = subprocess.run(["launchctl", "print", f"gui/{uid}/{LABEL}"], capture_output=True)
+        if r.returncode != 0:
+            return True
+        time.sleep(0.5)
+    return False
+
+
 def _plist_path() -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 
@@ -123,11 +146,12 @@ def cmd_install(cfg: Config) -> None:
     Path(cfg.data_dir).mkdir(parents=True, exist_ok=True)
     p = _plist_path()
     p.parent.mkdir(parents=True, exist_ok=True)
-    extra = [d for d in os.environ.get("PATH", "").split(":") if d and d not in DEFAULT_PATH.split(":")]
-    path = ":".join(extra + DEFAULT_PATH.split(":"))
-    p.write_text(build_plist(sys.executable, str(Path(__file__).resolve().parent.parent), cfg.data_dir, path))
     uid = os.getuid()
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True)
+    if not _wait_unloaded(uid):
+        print("warning: previous codex-resume job did not unload within 15s")
+    p.write_text(build_plist(sys.executable, str(Path(__file__).resolve().parent.parent), cfg.data_dir,
+                             install_path(os.environ.get("PATH", ""))))
     r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(p)], capture_output=True, text=True)
     print(f"installed {p}" if r.returncode == 0 else f"launchctl bootstrap failed: {r.stderr.strip()}")
     print(f"web UI: http://127.0.0.1:{cfg.port}   log: {cfg.data_dir}/daemon.log")
