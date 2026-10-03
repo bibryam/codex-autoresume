@@ -22,6 +22,9 @@ button{font:inherit;font-size:12px;padding:4px 10px;border-radius:8px;border:1px
 button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
 .log{font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;color:var(--muted);max-height:260px;overflow:auto}
 .empty{color:var(--muted);padding:12px 0}
+.editrow td{background:rgba(10,132,255,.06)}.editform{display:grid;grid-template-columns:1fr 200px 140px auto;gap:10px;align-items:end}
+.editform label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.editform textarea,.editform input{width:100%;box-sizing:border-box;font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--bar);background:var(--card);color:var(--fg)}
+.editform textarea{min-height:56px;resize:vertical}
 </style></head><body>
 <h1>codex-resume</h1><div class="sub" id="sub">loading…</div>
 <div class="card" id="limits"></div>
@@ -42,11 +45,19 @@ function row(e,now){const when=e.state==='scheduled'?(e.position===1?fmtT(e.resu
  <td><code>${esc(e.message)}</code><div class="ask">${esc(e.model||'')} ${esc(e.effort||'')}</div></td>
  <td style="white-space:nowrap">${e.state==='skipped'?`<button onclick="post('/api/threads/${e.thread_id}/unskip')">Unskip</button>`:`<button onclick="post('/api/threads/${e.thread_id}/skip')">Skip</button>`}
  <button class="primary" onclick="post('/api/threads/${e.thread_id}/resume-now')">Now</button>
- <button onclick="editMsg(${esc(JSON.stringify([e.thread_id,e.message,e.model||'',e.effort||'']))})">Edit</button></td></tr>`}
-function editMsg(args){const [id,msg,model,effort]=args;const m=prompt('Message to send when resuming:',msg);if(m===null)return;
- const me=prompt('Model/effort (blank keeps thread defaults), e.g. gpt-6-astra/xhigh:',model?model+'/'+(effort||''):'');if(me===null)return;
- const [mo,ef]=me.split('/');post('/api/threads/'+id+'/message',{message:m,model:mo||null,effort:ef||null})}
-async function load(){try{const s=await(await fetch('/api/state')).json();const now=s.now;
+ <button onclick="startEdit(${esc(JSON.stringify(e.thread_id))})">${editing===e.thread_id?'Close':'Edit'}</button></td></tr>${editing===e.thread_id?editRow(e):''}`}
+let editing=null;
+function startEdit(id){editing=(editing===id)?null:id;load(true)}
+function editRow(e){return`<tr class="editrow"><td colspan="7"><form class="editform" onsubmit="return saveEdit(event,${esc(JSON.stringify(e.thread_id))})">
+ <div><label>Message sent when resuming</label><textarea name="message" required>${esc(e.message)}</textarea></div>
+ <div><label>Model</label><input name="model" list="models" value="${esc(e.model||'')}" placeholder="thread default"></div>
+ <div><label>Reasoning effort</label><input name="effort" list="efforts" value="${esc(e.effort||'')}" placeholder="thread default"></div>
+ <div><button class="primary" type="submit">Save</button><button type="button" onclick="startEdit(${esc(JSON.stringify(e.thread_id))})">Cancel</button></div></form>
+ <datalist id="models"><option value="gpt-6-astra"><option value="gpt-6-sol"><option value="gpt-5-6"><option value="gpt-5-6-thinking"></datalist>
+ <datalist id="efforts"><option value="low"><option value="medium"><option value="high"><option value="xhigh"><option value="ultra"></datalist></td></tr>`}
+async function saveEdit(ev,id){ev.preventDefault();const f=new FormData(ev.target);editing=null;
+ await post('/api/threads/'+id+'/message',{message:f.get('message'),model:(f.get('model')||'').trim()||null,effort:(f.get('effort')||'').trim()||null});return false}
+async function load(force){if(editing&&!force)return;try{const s=await(await fetch('/api/state')).json();const now=s.now;
  document.getElementById('sub').textContent=`engine: ${s.engine} · updated ${new Date().toLocaleTimeString()} · ${s.config.approvals} approvals · weekly guard ${s.config.weekly_guard}% · max ${s.config.max_attempts}/day${s.note?' · '+s.note:''}`;
  const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${L.plan||'?'} · read ${fmtT(L.fetched_at)}${s.limits_stale?' · STALE (engine down)':''}</div>`;
  document.getElementById('threads').innerHTML=s.entries.length?`<table><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Resume at</th><th>State</th><th>Message</th><th></th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
