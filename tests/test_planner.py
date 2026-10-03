@@ -88,3 +88,32 @@ class PlannerTest(unittest.TestCase):
         e = build_plan([blocked("a", 1)], limits(True), self.state, self.cfg, NOW).entries[0]
         self.assertEqual((e.message, e.model, e.effort), ("carry on", "gpt-x", "low"))
         self.assertEqual(e.to_dict()["message"], "carry on")
+
+
+class CooldownTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.state = State(Path(self.tmp.name) / "s.json")
+        self.cfg = Config(grace_seconds=60, retry_cooldown_seconds=600)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_recently_attempted_thread_in_cooldown(self):
+        # we resumed at NOW-30 but the detector still shows the old failure (blocked_at older than the attempt)
+        self.state.record_attempt("a", NOW - 30)
+        plan = build_plan([blocked("a", NOW - 100), blocked("b", NOW - 50)], limits(True), self.state, self.cfg, NOW)
+        by = {e.thread_id: e for e in plan.entries}
+        self.assertEqual(by["a"].state, "cooldown")
+        self.assertEqual(plan.next_action.thread_id, "b")
+
+    def test_cooldown_expires(self):
+        self.state.record_attempt("a", NOW - 601)
+        plan = build_plan([blocked("a", NOW - 1000)], limits(True), self.state, self.cfg, NOW)
+        self.assertEqual(plan.entries[0].state, "scheduled")
+        self.assertEqual(plan.next_action.thread_id, "a")
+
+    def test_new_failure_after_attempt_is_not_cooldown(self):
+        self.state.record_attempt("a", NOW - 30)
+        plan = build_plan([blocked("a", NOW - 10)], limits(True), self.state, self.cfg, NOW)
+        self.assertEqual(plan.entries[0].state, "scheduled")

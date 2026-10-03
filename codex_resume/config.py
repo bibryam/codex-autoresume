@@ -21,6 +21,7 @@ class Config:
     tick_seconds: int = 60
     desktop_wait_seconds: int = 90
     turn_timeout_seconds: int = 14400
+    retry_cooldown_seconds: int = 600
 
     @classmethod
     def load(cls, path: str | None = None) -> "Config":

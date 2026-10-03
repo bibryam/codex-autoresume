@@ -57,6 +57,9 @@ def build_plan(blocked: list[Blocked], limits: Limits | None, state: State, cfg:
     for b in ordered:
         st = state.thread(b.thread_id)
         attempts = state.attempts_since(b.thread_id, now - DAY)
+        last_attempt = max(st["attempts"], default=None)
+        in_cooldown = (last_attempt is not None and last_attempt >= b.blocked_at
+                       and now < last_attempt + cfg.retry_cooldown_seconds)
         resume_at, reason = _earliest(limits, b, cfg, now)
         if st["resume_now"]:
             resume_at, reason = now, "resume now requested"
@@ -70,6 +73,9 @@ def build_plan(blocked: list[Blocked], limits: Limits | None, state: State, cfg:
         elif not st["resume_now"] and attempts >= cfg.max_attempts:
             kind = "max-attempts"
             reason = f"{attempts} automatic resumes in 24h"
+        elif not st["resume_now"] and in_cooldown:
+            kind = "cooldown"
+            reason = f"resumed {(now - last_attempt) // 60} min ago; waiting before retrying"
         elif not st["resume_now"] and weekly >= cfg.weekly_guard:
             kind = "weekly-guard"
             reason = f"weekly usage {weekly}% >= guard {cfg.weekly_guard}%"
