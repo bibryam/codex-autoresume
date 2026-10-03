@@ -13,9 +13,9 @@ h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:24px 0 8px;color:var(-
 .gauge{display:grid;grid-template-columns:90px 1fr 300px;gap:12px;align-items:center;margin:8px 0}
 .bar{height:10px;background:var(--bar);border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
 .bar.warn i{background:var(--warn)}.bar.bad i{background:var(--bad)}
-table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:900px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--bar);vertical-align:top;overflow-wrap:anywhere}
+table{width:100%;border-collapse:collapse;table-layout:fixed;min-width:1000px}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid var(--bar);vertical-align:top;overflow-wrap:anywhere}
 th{color:var(--muted);font-weight:500;font-size:12px;text-transform:uppercase;letter-spacing:.03em}#threads{overflow-x:auto}
-.ask{color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.ask{color:var(--muted);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.4em;max-height:2.8em}
 .yes,.no,.run,.wait{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;margin-bottom:3px}
 .yes{background:#d6f5de;color:#0b6b2a}.run{background:#d1e9ff;color:#0a4a8a}.wait{background:#ffe8c2;color:#7a4a00}.no{background:var(--bar);color:var(--muted)}
 .when{font-weight:600}.reason{color:var(--muted);font-size:12px}button:disabled{opacity:.4;cursor:default}
@@ -85,7 +85,7 @@ async function saveEdit(ev,id){ev.preventDefault();const f=new FormData(ev.targe
 async function load(force){if(editing&&!force)return;try{const s=await(await fetch('/api/state')).json();const now=s.now;MODELS=s.models||[];
  document.getElementById('sub').textContent=`engine: ${s.engine} · updated ${new Date().toLocaleTimeString()} · ${s.config.approvals} approvals · weekly guard ${s.config.weekly_guard}% · max ${s.config.max_attempts}/day${s.note?' · '+s.note:''}`;
  const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${L.plan||'?'} · read ${fmtT(L.fetched_at)}${s.limits_stale?' · STALE (engine down)':''}</div>`;
- document.getElementById('threads').innerHTML=s.entries.length?`<table><colgroup><col style="width:20%"><col style="width:22%"><col style="width:10%"><col style="width:24%"><col style="width:12%"><col style="width:12%"></colgroup><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Will it resume?</th><th>Message · model</th><th>Actions</th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
+ document.getElementById('threads').innerHTML=s.entries.length?`<table><colgroup><col style="width:19%"><col style="width:20%"><col style="width:9%"><col style="width:23%"><col style="width:12%"><col style="width:17%"></colgroup><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Will it resume?</th><th>Message · model</th><th>Actions</th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
  document.getElementById('history').textContent=s.history.map(h=>`${fmtT(h.ts)}  ${(h.thread_id||'').slice(0,13).padEnd(13)}  ${h.event.padEnd(18)} ${h.detail||''}`).join('\n')||'nothing yet';
  document.getElementById('log').textContent=(s.log||[]).join('\n');}catch(e){document.getElementById('sub').textContent='daemon unreachable: '+e}}
 load();setInterval(load,10000);
