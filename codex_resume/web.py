@@ -14,7 +14,7 @@ h1{font-size:20px;margin:0 0 4px}h2{font-size:14px;margin:24px 0 8px;color:var(-
 .bar{height:10px;background:var(--bar);border-radius:5px;overflow:hidden}.bar i{display:block;height:100%;background:var(--ok)}
 .bar.warn i{background:var(--warn)}.bar.bad i{background:var(--bad)}
 table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--bar);vertical-align:top}
-th{color:var(--muted);font-weight:500}.ask{max-width:380px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+th{color:var(--muted);font-weight:500}#threads{overflow-x:auto}.ask{max-width:300px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .state{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;background:var(--bar)}
 .state.scheduled{background:#d1e9ff;color:#0a4a8a}.state.running{background:#d6f5de;color:#0b6b2a}.state.skipped,.state.max-attempts,.state.weekly-guard,.state.cooldown,.state.automation{opacity:.7}
 .state.pending-in-app{background:#ffe8c2;color:#7a4a00}
