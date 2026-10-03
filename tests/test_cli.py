@@ -1,11 +1,11 @@
 import unittest
-from codex_resume.__main__ import build_plist, format_status
+from codex_autoresume.__main__ import build_plist, format_status
 
 class CliTest(unittest.TestCase):
     def test_plist_contents(self):
         p = build_plist("/usr/bin/python3", "/work", "/data")
         self.assertIn("<string>/usr/bin/python3</string>", p)
-        self.assertIn("<string>codex_resume</string>", p)
+        self.assertIn("<string>codex_autoresume</string>", p)
         self.assertIn("<key>WorkingDirectory</key>\n    <string>/work</string>", p)
         self.assertIn("/data/daemon.log", p)
         self.assertIn("<key>KeepAlive</key>", p)
@@ -27,7 +27,7 @@ class CliTest(unittest.TestCase):
 class SignalTest(unittest.TestCase):
     def test_sigterm_raises_keyboard_interrupt(self):
         import os, signal
-        from codex_resume.__main__ import install_signal_handlers
+        from codex_autoresume.__main__ import install_signal_handlers
         install_signal_handlers()
         with self.assertRaises(KeyboardInterrupt):
             os.kill(os.getpid(), signal.SIGTERM)
@@ -36,7 +36,7 @@ class SignalTest(unittest.TestCase):
 
 class InstallPathTest(unittest.TestCase):
     def test_install_path_keeps_user_dirs_and_drops_temp_shims(self):
-        from codex_resume.__main__ import install_path
+        from codex_autoresume.__main__ import install_path
         env = "/var/folders/zz/T/cmux-cli-shims/ABC:/Users/me/.local/bin:/opt/homebrew/bin:/private/tmp/x:/usr/bin:/Users/me/.nvm/versions/node/v22/bin"
         got = install_path(env)
         self.assertEqual(got.split(":")[:2], ["/Users/me/.local/bin", "/Users/me/.nvm/versions/node/v22/bin"])

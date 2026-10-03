@@ -1,4 +1,4 @@
-# codex-resume
+# codex-autoresume
 
 Continues Codex threads in the ChatGPT desktop app after a usage-limit reset,
 so you do not have to come back and type "continue" yourself.
@@ -9,7 +9,7 @@ Background (recommended):
 
     ./start.sh
 
-This writes `~/Library/LaunchAgents/com.codex-resume.plist` and loads it with
+This writes `~/Library/LaunchAgents/com.codex-autoresume.plist` and loads it with
 `launchctl`. macOS then starts the daemon at every login (including after a
 reboot) and restarts it if it crashes. That is the only change made to your
 machine; nothing is installed system-wide and no root is needed. The script
@@ -22,10 +22,10 @@ Stop the daemon and remove the launch agent again:
 
 Foreground, in a terminal (Ctrl-C to stop; useful for debugging):
 
-    python3 -m codex_resume run
+    python3 -m codex_autoresume run
 
 Either way the page is at http://127.0.0.1:8765 and the log is at
-`~/.codex-resume/daemon.log`. `python3 -m codex_resume status` prints the
+`~/.codex-autoresume/daemon.log`. `python3 -m codex_autoresume status` prints the
 same information as a table and never changes anything.
 
 ## What you see on the page
@@ -61,7 +61,7 @@ sent while limits cannot be read.
 
 ## Config
 
-Optional `~/.codex-resume/config.json`:
+Optional `~/.codex-autoresume/config.json`:
 
     {"port": 8765, "weekly_guard": 90, "max_attempts": 3, "approvals": "guardian",
      "default_message": "continue", "grace_seconds": 60, "retry_cooldown_seconds": 600}

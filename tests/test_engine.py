@@ -1,5 +1,5 @@
 import os, sys, time, unittest
-from codex_resume.engine import Engine, EngineError
+from codex_autoresume.engine import Engine, EngineError
 
 FAKE = os.path.join(os.path.dirname(__file__), "fake_codex.py")
 

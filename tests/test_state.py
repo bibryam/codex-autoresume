@@ -1,6 +1,6 @@
 import tempfile, unittest
 from pathlib import Path
-from codex_resume.state import State
+from codex_autoresume.state import State
 
 class StateTest(unittest.TestCase):
     def test_roundtrip_and_defaults(self):

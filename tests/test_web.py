@@ -1,5 +1,5 @@
 import http.client, json, threading, unittest
-from codex_resume.web import make_server
+from codex_autoresume.web import make_server
 
 
 class FakeScheduler:
@@ -34,7 +34,7 @@ class WebTest(unittest.TestCase):
 
     def test_page_and_state(self):
         st, ct, data = self.req("GET", "/")
-        self.assertEqual(st, 200); self.assertIn("text/html", ct); self.assertIn(b"codex-resume", data)
+        self.assertEqual(st, 200); self.assertIn("text/html", ct); self.assertIn(b"codex-autoresume", data)
         st, ct, data = self.req("GET", "/api/state")
         self.assertEqual(st, 200); self.assertEqual(json.loads(data)["engine"], "ok")
 
@@ -75,3 +75,11 @@ class HardeningTest(WebTest):
         self.sched.known = {"t1"}
         self.assertEqual(self.req("POST", "/api/threads/t1/skip")[0], 200)
         self.assertEqual(self.req("POST", "/api/threads/nope/skip")[0], 404)
+
+
+class ThreadIdValidationTest(WebTest):
+    def test_malformed_thread_ids_are_rejected_before_any_action(self):
+        for bad in ("..%2F..%2Fetc", "a%20b", "%3Cscript%3E", "x" * 80):
+            self.assertEqual(self.req("POST", f"/api/threads/{bad}/skip")[0], 400, bad)
+        self.assertEqual(self.sched.calls, [])
+        self.assertEqual(self.req("POST", "/api/threads/01a0fe2e-7ce2-7211-b63e-19e5d0419055/skip")[0], 200)

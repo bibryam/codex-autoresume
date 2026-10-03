@@ -1,10 +1,10 @@
 import tempfile, threading, unittest
 from pathlib import Path
-from codex_resume.config import Config
-from codex_resume.deliver import Outcome
-from codex_resume.detector import Blocked
-from codex_resume.scheduler import Scheduler
-from codex_resume.state import State
+from codex_autoresume.config import Config
+from codex_autoresume.deliver import Outcome
+from codex_autoresume.detector import Blocked
+from codex_autoresume.scheduler import Scheduler
+from codex_autoresume.state import State
 
 NOW = 2_000_000
 RL_BLOCKED = {"ordinaryUsageAllowed": False, "rateLimits": {"primary": {"usedPercent": 100, "resetsAt": NOW + 100, "windowDurationMins": 300}, "secondary": {"usedPercent": 20, "resetsAt": NOW + 9999, "windowDurationMins": 10080}}}
@@ -126,8 +126,8 @@ class SchedulerTest(unittest.TestCase):
         self.assertIsNone(s.begin_watch("zzz").wait(0.01))
 
 
-class ReviewFixesSchedulerTest(SchedulerTest):
-    def test_c1_limits_failure_during_delivery_keeps_engine(self):
+class RobustnessTest(SchedulerTest):
+    def test_limits_failure_during_delivery_keeps_engine(self):
         flaky = FakeEngine(RL_OPEN)
         block = threading.Event()
         def deliverer(cfg, eng, entry, begin_watch, log, **kw):
@@ -147,7 +147,7 @@ class ReviewFixesSchedulerTest(SchedulerTest):
         self.assertTrue(s.snapshot()["engine"].startswith("down"))
         block.set(); s.join_delivery(2)
 
-    def test_c1_engine_exit_releases_watch(self):
+    def test_engine_exit_releases_watch(self):
         s = self.make(FakeEngine(RL_BLOCKED))
         s.tick()
         w = s.begin_watch("a")
@@ -156,7 +156,7 @@ class ReviewFixesSchedulerTest(SchedulerTest):
         self.assertEqual(turn["status"], "failed")
         self.assertIn("engine exited", turn["error"]["message"])
 
-    def test_c3_dry_run_never_delivers(self):
+    def test_dry_run_never_delivers(self):
         s = self.make(FakeEngine(RL_OPEN))
         s.dry_run = True
         s.tick()
@@ -164,7 +164,7 @@ class ReviewFixesSchedulerTest(SchedulerTest):
         self.assertEqual(self.delivered, [])
         self.assertEqual(s.snapshot()["entries"][0]["state"], "scheduled")
 
-    def test_i4_stale_limits_after_read_failure_do_not_deliver(self):
+    def test_stale_limits_after_read_failure_do_not_deliver(self):
         eng = FakeEngine(RL_OPEN)
         s = self.make(eng, outcome=Outcome("engine", True, "ok", "completed", None))
         s.tick(); self.assertTrue(self.done.wait(2)); s.join_delivery(2); self.done.clear()
@@ -177,7 +177,7 @@ class ReviewFixesSchedulerTest(SchedulerTest):
         self.assertEqual(self.delivered, [])
         self.assertIn("unavailable", s.snapshot()["note"])
 
-    def test_i5_pending_in_app_clears_when_a_newer_turn_failed(self):
+    def test_pending_in_app_clears_when_a_newer_turn_failed(self):
         s = self.make(FakeEngine(RL_OPEN), outcome=Outcome("pending-in-app", False, "queued"))
         s.tick(); self.assertTrue(self.done.wait(2)); s.join_delivery(2)
         self.assertEqual(s.snapshot()["entries"][0]["state"], "pending-in-app")

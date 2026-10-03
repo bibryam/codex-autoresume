@@ -1,6 +1,6 @@
 import json, sqlite3, tempfile, unittest
 from pathlib import Path
-from codex_resume.detector import find_blocked, latest_turn
+from codex_autoresume.detector import find_blocked, latest_turn
 
 ERR = json.dumps({"message": "You've hit your usage limit. ... try again at 1:56 PM.", "codexErrorInfo": "usageLimitExceeded"})
 
@@ -75,7 +75,7 @@ class DetectorTest(unittest.TestCase):
 
 class QueuedCountTest(unittest.TestCase):
     def test_counts_queue_rows_for_thread(self):
-        from codex_resume.detector import queued_count
+        from codex_autoresume.detector import queued_count
         with tempfile.TemporaryDirectory() as d:
             self.assertEqual(queued_count(d, "t"), 0)  # no db yet
             q = sqlite3.connect(Path(d) / "queue_1.sqlite")

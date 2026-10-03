@@ -15,7 +15,7 @@ from .scheduler import Scheduler
 from .state import State
 from .web import make_server
 
-LABEL = "com.codex-resume"
+LABEL = "com.codex-autoresume"
 
 
 def _t(ts):
@@ -54,7 +54,7 @@ def build_plist(python: str, workdir: str, data_dir: str, path: str = DEFAULT_PA
     <array>
         <string>{python}</string>
         <string>-m</string>
-        <string>codex_resume</string>
+        <string>codex_autoresume</string>
         <string>run</string>
     </array>
     <key>WorkingDirectory</key>
@@ -117,7 +117,7 @@ def cmd_run(cfg: Config) -> None:
     Path(cfg.data_dir).mkdir(parents=True, exist_ok=True)
     sched = Scheduler(cfg, State(Path(cfg.data_dir) / "state.json"))
     server = make_server(sched, port=cfg.port)
-    threading.Thread(target=server.serve_forever, daemon=True, name="codex-resume-web").start()
+    threading.Thread(target=server.serve_forever, daemon=True, name="codex-autoresume-web").start()
     sched.log(f"web UI on http://127.0.0.1:{cfg.port}")
     try:
         sched.run_forever()
@@ -149,7 +149,7 @@ def cmd_install(cfg: Config) -> None:
     uid = os.getuid()
     subprocess.run(["launchctl", "bootout", f"gui/{uid}/{LABEL}"], capture_output=True)
     if not _wait_unloaded(uid):
-        print("warning: previous codex-resume job did not unload within 15s")
+        print("warning: previous codex-autoresume job did not unload within 15s")
     p.write_text(build_plist(sys.executable, str(Path(__file__).resolve().parent.parent), cfg.data_dir,
                              install_path(os.environ.get("PATH", ""))))
     r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(p)], capture_output=True, text=True)
@@ -166,7 +166,7 @@ def cmd_uninstall(cfg: Config) -> None:
 
 
 def main(argv=None) -> None:
-    ap = argparse.ArgumentParser(prog="codex-resume")
+    ap = argparse.ArgumentParser(prog="codex-autoresume")
     ap.add_argument("command", choices=["run", "status", "install-launchd", "uninstall-launchd"])
     ap.add_argument("--config", default=None)
     args = ap.parse_args(argv)

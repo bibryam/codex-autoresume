@@ -95,7 +95,7 @@ class Scheduler:
             tid = str(params.get("threadId", ""))[:13]
             self.log(f"approval requested in thread {tid} ({method}); declined")
             self.state.add_history(int(self.clock()), params.get("threadId"), "approval-declined", method)
-            self.notify("codex-resume", f"Thread {tid} asked for approval; declined. Open it in the app.")
+            self.notify("codex-autoresume", f"Thread {tid} asked for approval; declined. Open it in the app.")
         return Engine.default_server_request(method, params)
 
     def _on_engine_exit(self) -> None:
@@ -176,8 +176,8 @@ class Scheduler:
         self.state.set_resume_now(entry.thread_id, False)
         self.state.add_history(now, entry.thread_id, "resuming", f"{entry.message!r} ({entry.title[:60]})")
         self.log(f"resuming thread {entry.thread_id[:13]} with {entry.message!r}")
-        self.notify("codex-resume", f"Resuming: {entry.title[:80]}")
-        self._worker = threading.Thread(target=self._deliver, args=(entry,), daemon=True, name="codex-resume-deliver")
+        self.notify("codex-autoresume", f"Resuming: {entry.title[:80]}")
+        self._worker = threading.Thread(target=self._deliver, args=(entry,), daemon=True, name="codex-autoresume-deliver")
         self._worker.start()
         self._replan()
 
@@ -199,7 +199,7 @@ class Scheduler:
         self.state.set_last_result(entry.thread_id, summary)
         self.state.add_history(now, entry.thread_id, "done" if outcome.ok else "ended", summary)
         self.log(f"thread {entry.thread_id[:13]} {summary}")
-        self.notify("codex-resume", f"{'Finished' if outcome.ok else 'Stopped'}: {entry.title[:60]} ({outcome.mode})")
+        self.notify("codex-autoresume", f"{'Finished' if outcome.ok else 'Stopped'}: {entry.title[:60]} ({outcome.mode})")
         if outcome.mode in ("engine", "error"):
             self._reset_engine()  # releases the thread writer lock for the desktop
         self.limits_at = 0
@@ -265,7 +265,7 @@ class Scheduler:
             }
 
     def run_forever(self) -> None:
-        self.log(f"codex-resume started; engine {self.cfg.codex_bin}")
+        self.log(f"codex-autoresume started; engine {self.cfg.codex_bin}")
         while not self._stop.is_set():
             try:
                 self.tick()

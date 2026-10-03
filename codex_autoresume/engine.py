@@ -22,7 +22,7 @@ class EngineError(Exception):
 class Engine:
     """JSON-RPC client for `codex app-server --listen stdio://`."""
 
-    def __init__(self, codex_bin: str, client_name: str = "codex-resume",
+    def __init__(self, codex_bin: str, client_name: str = "codex-autoresume",
                  on_notification: Notification | None = None,
                  on_server_request: ServerRequest | None = None,
                  on_exit: Callable[[], None] | None = None):
@@ -147,4 +147,4 @@ class Engine:
     def default_server_request(method: str, params: dict) -> "tuple[dict | None, dict | None]":
         if method in ("item/commandExecution/requestApproval", "item/fileChange/requestApproval"):
             return {"decision": "decline"}, None
-        return None, {"code": -32601, "message": f"{method} is not handled by codex-resume"}
+        return None, {"code": -32601, "message": f"{method} is not handled by codex-autoresume"}

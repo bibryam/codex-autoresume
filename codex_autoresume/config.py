@@ -11,7 +11,7 @@ DEFAULT_BIN = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.a
 class Config:
     codex_bin: str = DEFAULT_BIN
     codex_home: str = str(Path.home() / ".codex")
-    data_dir: str = str(Path.home() / ".codex-resume")
+    data_dir: str = str(Path.home() / ".codex-autoresume")
     port: int = 8765
     weekly_guard: int = 90
     max_attempts: int = 3

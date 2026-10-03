@@ -1,6 +1,6 @@
 import unittest
 from datetime import datetime, timezone, timedelta
-from codex_resume.limits import parse_limits, parse_reset_hint, Limits
+from codex_autoresume.limits import parse_limits, parse_reset_hint, Limits
 
 SAMPLE = {
     "ordinaryUsageAllowed": False,

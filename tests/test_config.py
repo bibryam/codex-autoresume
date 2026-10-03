@@ -1,6 +1,6 @@
 import json, tempfile, unittest
 from pathlib import Path
-from codex_resume.config import Config
+from codex_autoresume.config import Config
 
 class ConfigTest(unittest.TestCase):
     def test_defaults(self):

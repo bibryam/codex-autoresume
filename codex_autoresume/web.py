@@ -1,8 +1,11 @@
 from __future__ import annotations
 import json
+import re
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>codex-resume</title>
+THREAD_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+PAGE = r"""<!doctype html><html><head><meta charset="utf-8"><title>codex-autoresume</title>
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <style>
 :root{color-scheme:light dark;--fg:#1d1d1f;--bg:#f5f5f7;--card:#fff;--muted:#6e6e73;--bar:#e5e5ea;--ok:#34c759;--warn:#ff9f0a;--bad:#ff3b30;--accent:#0a84ff}
@@ -30,7 +33,7 @@ button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}bu
 .editform label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}.editform textarea,.editform input,.editform select{width:100%;box-sizing:border-box;font:inherit;padding:6px 8px;border-radius:8px;border:1px solid var(--bar);background:var(--card);color:var(--fg)}
 .editform textarea{min-height:56px;resize:vertical}
 </style></head><body>
-<h1>codex-resume</h1><div class="sub" id="sub">loading…</div>
+<h1>codex-autoresume</h1><div class="sub" id="sub">loading…</div>
 <div class="card" id="limits"></div>
 <h2>Blocked threads</h2><div class="card" id="threads"></div>
 <h2>History</h2><div class="card log" id="history"></div>
@@ -56,16 +59,16 @@ function resumeCell(e,now){
   case 'weekly-guard': return `<span class="no">No · weekly guard</span><div class="reason">${esc(e.reason)}. Press Schedule to resume anyway.</div>`;
   default: return `<span class="no">${esc(e.state)}</span><div class="reason">${esc(e.reason)}</div>`;
  }}
-function row(e,now){const parked=['skipped','automation','max-attempts','weekly-guard'].includes(e.state);const id=esc(JSON.stringify(e.thread_id));
+function row(e,now){const parked=['skipped','automation','max-attempts','weekly-guard'].includes(e.state);const id=esc(JSON.stringify(e.thread_id));const tid=encodeURIComponent(e.thread_id);
  return`<tr><td><b>${esc(e.cwd.split('/').pop())}</b><div class="ask" title="${esc(e.title)}">${esc(e.title)}</div></td>
  <td><div class="ask" title="${esc(e.last_user_message)}">${esc(e.last_user_message)}</div></td>
  <td>${fmtT(e.blocked_at)}<div class="reason">${rel(e.blocked_at,now)}</div></td>
  <td>${resumeCell(e,now)}${e.last_result?`<div class="reason" title="${esc(e.last_result)}">last run: ${esc(e.last_result)}</div>`:''}</td>
  <td><code>${esc(e.message)}</code><div class="reason">${esc(e.model||'thread default')} · ${esc(e.effort||'default effort')}</div></td>
  <td style="white-space:nowrap">${parked
-   ? `<button class="primary" onclick="post('/api/threads/${e.thread_id}/schedule')">Schedule</button><button disabled title="already not resuming">Skip</button>`
-   : `<button class="danger" onclick="post('/api/threads/${e.thread_id}/skip')">Skip</button>`}
- <button onclick="post('/api/threads/${e.thread_id}/resume-now')" title="resume immediately, ignoring the window and guards">Now</button>
+   ? `<button class="primary" onclick="post('/api/threads/${tid}/schedule')">Schedule</button><button disabled title="already not resuming">Skip</button>`
+   : `<button class="danger" onclick="post('/api/threads/${tid}/skip')">Skip</button>`}
+ <button onclick="post('/api/threads/${tid}/resume-now')" title="resume immediately, ignoring the window and guards">Now</button>
  <button onclick="startEdit(${id})">${editing===e.thread_id?'Close':'Edit'}</button></td></tr>${editing===e.thread_id?editRow(e):''}`}
 let editing=null;
 function startEdit(id){editing=(editing===id)?null:id;load(true)}
@@ -94,7 +97,7 @@ load();setInterval(load,10000);
 
 def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
-        server_version = "codex-resume"
+        server_version = "codex-autoresume"
 
         def log_message(self, fmt, *args):  # quiet
             pass
@@ -136,6 +139,8 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
             if len(parts) != 4 or parts[:2] != ["api", "threads"]:
                 return self._json(404, {"error": "not found"})
             tid, action = parts[2], parts[3]
+            if not THREAD_ID.match(tid):
+                return self._json(400, {"error": "bad thread id"})
             known = getattr(scheduler, "known_threads", lambda: None)()
             if known is not None and tid not in known:
                 return self._json(404, {"error": "unknown thread"})

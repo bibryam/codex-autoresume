@@ -1,8 +1,8 @@
 import unittest
-from codex_resume.config import Config
-from codex_resume.deliver import deliver, queue_message, Outcome
-from codex_resume.engine import EngineError
-from codex_resume.planner import Entry
+from codex_autoresume.config import Config
+from codex_autoresume.deliver import deliver, queue_message, Outcome
+from codex_autoresume.engine import EngineError
+from codex_autoresume.planner import Entry
 
 
 def entry(**kw):
@@ -120,7 +120,7 @@ class DeliverTest(unittest.TestCase):
 
 
 class QueuedThreadTest(unittest.TestCase):
-    """I2: when a message is already queued for the thread, resuming drains it; never also turn/start."""
+    """When a message is already queued for the thread, resuming drains it; never also turn/start."""
 
     def setUp(self):
         self.cfg = Config(codex_bin="/bin/echo", codex_home="/nonexistent", desktop_wait_seconds=20)
