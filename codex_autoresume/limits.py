@@ -39,8 +39,8 @@ def _window(d: dict | None) -> Window | None:
 def parse_limits(result: dict, now: int) -> Limits:
     rl = result.get("rateLimits") or {}
     allowed = result.get("ordinaryUsageAllowed")
-    if allowed is None and rl:
-        allowed = rl.get("rateLimitReachedType") is None
+    if allowed is None and "rateLimitReachedType" in rl:
+        allowed = rl["rateLimitReachedType"] is None
     plan = rl.get("planType")
     if not isinstance(plan, str):
         plan = None

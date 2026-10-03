@@ -57,11 +57,12 @@ scheduler            own engine              desktop engine
   starts when the previous turn ends.
 - Delivery needs fresh limits that say usage is allowed, or a reset time
   that has demonstrably passed. Stale or unreadable limits never deliver.
-- Guards: weekly usage above `weekly_guard`, more than `max_attempts`
-  automatic resumes in 24h, a 10-minute cooldown after any attempt, and a
+- Guards: weekly usage at or above `weekly_guard`, `max_attempts` resumes
+  (automatic or Now) in 24h, a 10-minute cooldown after any attempt, and a
   hold after a repeat failure until a window that started after it.
-  "Schedule" on the page overrides the guards for one thread; "Now"
-  resumes immediately.
+  "Schedule" lifts the automation rule and the weekly and attempt guards for
+  one resume of that thread; it still waits for the window, the cooldown and
+  the repeat-failure hold. "Now" resumes immediately.
 - Threads that received a scheduled heartbeat (`<heartbeat>` user message)
   are automation threads and are never resumed automatically.
 - Approval prompts from a turn we run are routed to Codex's guardian

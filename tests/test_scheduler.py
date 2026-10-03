@@ -27,7 +27,7 @@ def blocked(tid, at):
     return Blocked(tid, "/p/x", "title", "last", at, "try again at 1:56 PM.", "gpt-6-astra", "xhigh", "vscode", tid + "-t")
 
 
-class SchedulerTest(unittest.TestCase):
+class SchedulerBase(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.state = State(Path(self.tmp.name) / "s.json")
@@ -50,6 +50,8 @@ class SchedulerTest(unittest.TestCase):
         return Scheduler(self.cfg, self.state, notifier=lambda t, x: self.notes.append(x), engine_factory=factory,
                          clock=lambda: self.clock[0], finder=lambda home: self.blocked, deliverer=deliverer)
 
+
+class SchedulerTest(SchedulerBase):
     def test_tick_blocked_schedules_and_does_not_deliver(self):
         s = self.make(FakeEngine(RL_BLOCKED))
         s.tick()
@@ -126,7 +128,7 @@ class SchedulerTest(unittest.TestCase):
         self.assertIsNone(s.begin_watch("zzz").wait(0.01))
 
 
-class RobustnessTest(SchedulerTest):
+class RobustnessTest(SchedulerBase):
     def test_limits_failure_during_delivery_keeps_engine(self):
         flaky = FakeEngine(RL_OPEN)
         block = threading.Event()
@@ -190,7 +192,7 @@ class RobustnessTest(SchedulerTest):
         self.assertEqual(self.delivered, ["a", "a"])
 
 
-class ModelListTest(SchedulerTest):
+class ModelListTest(SchedulerBase):
     def test_models_appear_in_snapshot(self):
         class WithModels(FakeEngine):
             def call(self, method, params=None, timeout=60):
@@ -207,3 +209,43 @@ class ModelListTest(SchedulerTest):
         self.assertEqual([m["id"] for m in models], ["gpt-6-astra"])
         self.assertEqual(models[0]["efforts"], ["low", "xhigh"])
         self.assertEqual(models[0]["default_effort"], "low")
+
+
+class FollowUpFixesTest(SchedulerBase):
+    def test_schedule_override_expires_after_one_delivery(self):
+        self.blocked = [Blocked("h", "/p/x", "title", "continue", 10, None, "gpt-6-astra", "xhigh", "vscode", "h-t", is_automation=True)]
+        s = self.make(FakeEngine(RL_OPEN))
+        s.schedule("h")
+        s.tick(); self.assertTrue(self.done.wait(2)); s.join_delivery(2)
+        self.assertEqual(self.delivered, ["h"])
+        self.assertFalse(self.state.thread("h")["force"])
+
+    def test_notification_without_reached_type_does_not_open_the_window(self):
+        s = self.make(FakeEngine(RL_BLOCKED))
+        s.tick()
+        at = s.limits_at
+        self.engine.on_notification("account/rateLimits/updated", {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": NOW - 5}}})
+        self.assertEqual(s.limits_at, at)
+        s.tick()
+        self.assertEqual(self.delivered, [])
+
+    def test_dry_run_tick_writes_no_state(self):
+        self.state.set_pending_in_app("zzz", 5, "old")  # stale flag for a thread that is no longer blocked
+        before = self.state.path.read_text()
+        s = self.make(FakeEngine(RL_OPEN)); s.dry_run = True
+        s.tick()
+        self.assertEqual(self.state.path.read_text(), before)
+
+    def test_now_on_the_running_thread_is_ignored(self):
+        block = threading.Event()
+        def deliverer(cfg, eng, entry, begin_watch, log, **kw):
+            self.delivered.append(entry.thread_id); self.done.set(); block.wait(5); return Outcome("engine", True, "ok", "completed", None)
+        eng = FakeEngine(RL_OPEN)
+        def factory(on_notification, on_server_request):
+            eng.on_notification = on_notification; return eng
+        s = Scheduler(self.cfg, self.state, notifier=lambda t, x: None, engine_factory=factory,
+                      clock=lambda: self.clock[0], finder=lambda home: self.blocked, deliverer=deliverer)
+        s.tick(); self.assertTrue(self.done.wait(2))
+        s.resume_now("a"); s.join_delivery(0.5)
+        self.assertFalse(self.state.thread("a")["resume_now"])
+        block.set(); s.join_delivery(2)

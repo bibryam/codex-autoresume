@@ -4,7 +4,7 @@ import subprocess
 
 
 def _quote(s: str) -> str:
-    return json.dumps(s, ensure_ascii=False)
+    return json.dumps("".join(ch for ch in s if ch >= " "), ensure_ascii=False)
 
 
 def notify(title: str, text: str, runner=subprocess.run) -> bool:

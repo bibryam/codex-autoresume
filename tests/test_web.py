@@ -16,7 +16,7 @@ class FakeScheduler:
     def resume_now(self, tid): self.calls.append(("now", tid))
 
 
-class WebTest(unittest.TestCase):
+class WebBase(unittest.TestCase):
     def setUp(self):
         self.sched = FakeScheduler()
         self.server = make_server(self.sched, port=0)
@@ -32,6 +32,8 @@ class WebTest(unittest.TestCase):
         r = c.getresponse(); data = r.read(); c.close()
         return r.status, r.getheader("Content-Type", ""), data
 
+
+class WebTest(WebBase):
     def test_page_and_state(self):
         st, ct, data = self.req("GET", "/")
         self.assertEqual(st, 200); self.assertIn("text/html", ct); self.assertIn(b"codex-autoresume", data)
@@ -40,10 +42,10 @@ class WebTest(unittest.TestCase):
 
     def test_actions(self):
         self.assertEqual(self.req("POST", "/api/threads/t1/skip")[0], 200)
-        self.assertEqual(self.req("POST", "/api/threads/t1/unskip")[0], 200)
+        self.assertEqual(self.req("POST", "/api/threads/t1/unskip")[0], 404)
         self.assertEqual(self.req("POST", "/api/threads/t1/resume-now")[0], 200)
         self.assertEqual(self.req("POST", "/api/threads/t1/schedule")[0], 200)
-        self.assertEqual(self.sched.calls, [("skip", "t1", True), ("skip", "t1", False), ("now", "t1"), ("schedule", "t1")])
+        self.assertEqual(self.sched.calls, [("skip", "t1", True), ("now", "t1"), ("schedule", "t1")])
 
     def test_post_message_roundtrip(self):
         msg = 'say "hi" — ünï'
@@ -57,7 +59,7 @@ class WebTest(unittest.TestCase):
         self.assertEqual(self.req("POST", "/api/threads/t1/message", None)[0], 400)
 
 
-class HardeningTest(WebTest):
+class HardeningTest(WebBase):
     def test_rejects_foreign_host_header(self):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=5)
         c.request("GET", "/api/state", headers={"Host": "evil.example:80"})
@@ -77,9 +79,21 @@ class HardeningTest(WebTest):
         self.assertEqual(self.req("POST", "/api/threads/nope/skip")[0], 404)
 
 
-class ThreadIdValidationTest(WebTest):
+class ThreadIdValidationTest(WebBase):
     def test_malformed_thread_ids_are_rejected_before_any_action(self):
         for bad in ("..%2F..%2Fetc", "a%20b", "%3Cscript%3E", "x" * 80):
             self.assertEqual(self.req("POST", f"/api/threads/{bad}/skip")[0], 400, bad)
         self.assertEqual(self.sched.calls, [])
         self.assertEqual(self.req("POST", "/api/threads/01a0fe2e-7ce2-7211-b63e-19e5d0419055/skip")[0], 200)
+
+
+class MessageFieldTypesTest(WebBase):
+    def test_model_and_effort_must_be_short_strings(self):
+        st, _, _ = self.req("POST", "/api/threads/t1/message", {"message": "go", "model": 5, "effort": ["x"]})
+        self.assertEqual(st, 400)
+        st, _, _ = self.req("POST", "/api/threads/t1/message", {"message": "go", "model": "m" * 65})
+        self.assertEqual(st, 400)
+        self.assertEqual(self.sched.calls, [])
+        st, _, _ = self.req("POST", "/api/threads/t1/message", {"message": "go", "model": "gpt-6-astra", "effort": None})
+        self.assertEqual(st, 200)
+        self.assertEqual(self.sched.calls[-1], ("message", "t1", "go", "gpt-6-astra", None))

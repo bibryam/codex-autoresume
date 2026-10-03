@@ -1,8 +1,10 @@
 from __future__ import annotations
 import json
 import sqlite3
+from contextlib import closing
 from dataclasses import dataclass, asdict
 from pathlib import Path
+from urllib.parse import quote
 
 MAIN_SOURCES = ("vscode", "cli", "exec", "appserver", "appServer")
 
@@ -28,8 +30,8 @@ class Blocked:
 RECENT_USER_MESSAGES = 5
 
 
-def _ro(path: Path) -> sqlite3.Connection:
-    return sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
+def _ro(path: Path):
+    return closing(sqlite3.connect(f"file:{quote(str(path))}?mode=ro", uri=True, timeout=5))
 
 
 def _user_text(item_json: str) -> str:
@@ -54,10 +56,13 @@ def latest_turn(codex_home: str, thread_id: str):
     hist = Path(codex_home) / "thread_history_1.sqlite"
     if not hist.exists():
         return None
-    with _ro(hist) as h:
-        row = h.execute(
-            "select turn_id, status, started_at, completed_at, error_json from thread_turns "
-            "where thread_id=? order by rollout_ordinal desc limit 1", (thread_id,)).fetchone()
+    try:
+        with _ro(hist) as h:
+            row = h.execute(
+                "select turn_id, status, started_at, completed_at, error_json from thread_turns "
+                "where thread_id=? order by rollout_ordinal desc limit 1", (thread_id,)).fetchone()
+    except sqlite3.Error:
+        return None
     if not row:
         return None
     info, _ = _error_info(row[4])

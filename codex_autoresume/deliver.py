@@ -22,7 +22,7 @@ class Outcome:
 
 
 def queue_message(cfg: Config, thread_id: str, message: str, runner=subprocess.run) -> str:
-    r = runner([cfg.codex_bin, "queue", "--thread", thread_id, "--message", message],
+    r = runner([cfg.codex_bin, "queue", f"--thread={thread_id}", f"--message={message}"],
                capture_output=True, text=True, timeout=60)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout or "codex queue failed").strip()[:300])

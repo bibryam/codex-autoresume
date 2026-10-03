@@ -25,23 +25,30 @@ Foreground, in a terminal (Ctrl-C to stop; useful for debugging):
     python3 -m codex_autoresume run
 
 Either way the page is at http://127.0.0.1:8765 and the log is at
-`~/.codex-autoresume/daemon.log`. `python3 -m codex_autoresume status` prints the
-same information as a table and never changes anything.
+`~/.codex-autoresume/daemon.log`. `python3 -m codex_autoresume status` prints
+the same information as a table; it asks the running daemon, or starts a
+temporary engine of its own if none is running, and never resumes anything.
 
 ## What you see on the page
 
 - The 5h and weekly windows with their reset times.
 - Every thread blocked on the usage limit: project, last ask, when it was
-  blocked, when it will resume, its state, and the message it will be sent.
-- Buttons per thread: **Skip** (leave it alone), **Now** (resume immediately,
-  bypassing the guards), **Edit** (change the message, model and reasoning
-  effort used for the resume).
+  blocked, whether and when it will resume, and the message it will be sent.
+- Buttons per thread:
+  - **Skip**: do not resume this thread (red; disabled on rows that already
+    will not resume).
+  - **Schedule**: put a parked row back into the queue. It clears Skip and,
+    for one resume, overrides the automation rule and the guards below.
+  - **Now**: resume immediately, ignoring the window and the guards.
+  - **Edit**: change the message, model and reasoning effort for the resume.
+    The lists come from Codex; the thread's own values are preselected.
 
-States: `scheduled #n` (will resume in that order), `running`, `cooldown`
-(resumed in the last 10 min), `waiting-reset` (failed again on the limit),
-`weekly-guard`, `max-attempts`, `automation` (scheduled heartbeat thread,
-never auto-resumed), `pending-in-app` (queued inside the app; starts when
-the app picks it up or you open the thread).
+The "Will it resume?" column reads `Yes · #n` (in that order, with the time
+for #1), `Yes · waiting` (10-minute cooldown after an attempt, or waiting for
+the next window after a repeat failure), `Queued in the app` (the app will
+start it, or open the thread), or `No` with the reason: skipped, automation
+thread (a scheduled heartbeat posted into it), weekly guard, or the daily
+attempt limit.
 
 ## How it works
 
@@ -64,10 +71,17 @@ sent while limits cannot be read.
 Optional `~/.codex-autoresume/config.json`:
 
     {"port": 8765, "weekly_guard": 90, "max_attempts": 3, "approvals": "guardian",
-     "default_message": "continue", "grace_seconds": 60, "retry_cooldown_seconds": 600}
+     "default_message": "continue", "grace_seconds": 60, "retry_cooldown_seconds": 600,
+     "tick_seconds": 60, "desktop_wait_seconds": 90, "turn_timeout_seconds": 14400,
+     "codex_bin": "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex"}
 
-`approvals`: `guardian` routes approval prompts through Codex's guardian
-reviewer (what the desktop app does); `decline` declines them and notifies you.
+- `weekly_guard`: no automatic resume once weekly usage reaches this percent.
+- `max_attempts`: resumes per thread per 24 hours (automatic and Now).
+- `approvals`: `guardian` routes approval prompts through Codex's guardian
+  reviewer (what the desktop app does); `decline` declines them and notifies you.
+- `grace_seconds`: wait after the reset time before resuming.
+- `desktop_wait_seconds`: how long to wait for the app to pick up a queued message.
+- `turn_timeout_seconds`: give up waiting for a resumed turn after this long.
 
 ## Tests
 

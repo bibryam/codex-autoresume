@@ -1,6 +1,6 @@
 import unittest
 from codex_autoresume.config import Config
-from codex_autoresume.deliver import deliver, queue_message, Outcome
+from codex_autoresume.deliver import deliver, queue_message
 from codex_autoresume.engine import EngineError
 from codex_autoresume.planner import Entry
 
@@ -110,7 +110,7 @@ class DeliverTest(unittest.TestCase):
             seen.append(cmd); return type("R", (), {"returncode": 0, "stdout": "Queued message 1 for thread t.\n", "stderr": ""})()
         msg = 'say "hi" — ünï'
         self.assertIn("Queued", queue_message(self.cfg, "t", msg, runner=runner))
-        self.assertEqual(seen[0], ["/bin/echo", "queue", "--thread", "t", "--message", msg])
+        self.assertEqual(seen[0], ["/bin/echo", "queue", "--thread=t", f"--message={msg}"])
 
     def test_queue_message_failure_raises(self):
         def runner(cmd, **kw):

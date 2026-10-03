@@ -2,6 +2,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import plistlib
 import urllib.request
 import signal
 import subprocess
@@ -36,7 +37,7 @@ def format_status(snap: dict) -> str:
         st = e["state"] + (f" #{e['position']}" if e.get("position") else "")
         when = _t(e["resume_at"]) if e["state"] == "scheduled" and e["position"] == 1 else ("after previous" if e["state"] == "scheduled" else "")
         lines.append(f"{e['thread_id'][:13]}  {Path(e['cwd']).name:<20} blocked {_t(e['blocked_at'])}  {st:<16} {when:<12} msg={e['message']!r}")
-        lines.append(f"              ask: {e['last_user_message'][:90]}")
+        lines.append(f"              ask: {' '.join(e['last_user_message'].split())[:90]}")
     return "\n".join(lines)
 
 
@@ -44,39 +45,16 @@ DEFAULT_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin"
 
 
 def build_plist(python: str, workdir: str, data_dir: str, path: str = DEFAULT_PATH) -> str:
-    return f"""<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>Label</key>
-    <string>{LABEL}</string>
-    <key>ProgramArguments</key>
-    <array>
-        <string>{python}</string>
-        <string>-m</string>
-        <string>codex_autoresume</string>
-        <string>run</string>
-    </array>
-    <key>WorkingDirectory</key>
-    <string>{workdir}</string>
-    <key>RunAtLoad</key>
-    <true/>
-    <key>KeepAlive</key>
-    <true/>
-    <key>StandardOutPath</key>
-    <string>{data_dir}/daemon.log</string>
-    <key>StandardErrorPath</key>
-    <string>{data_dir}/daemon.log</string>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <key>PATH</key>
-        <string>{path}</string>
-        <key>PYTHONUNBUFFERED</key>
-        <string>1</string>
-    </dict>
-</dict>
-</plist>
-"""
+    return plistlib.dumps({
+        "Label": LABEL,
+        "ProgramArguments": [python, "-m", "codex_autoresume", "run"],
+        "WorkingDirectory": workdir,
+        "RunAtLoad": True,
+        "KeepAlive": True,
+        "StandardOutPath": f"{data_dir}/daemon.log",
+        "StandardErrorPath": f"{data_dir}/daemon.log",
+        "EnvironmentVariables": {"PATH": path, "PYTHONUNBUFFERED": "1"},
+    }).decode()
 
 
 def install_signal_handlers() -> None:

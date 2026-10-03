@@ -47,7 +47,7 @@ class EngineTest(unittest.TestCase):
 
     def test_call_after_exit_raises(self):
         self.eng.notify("exit", {})
-        time.sleep(0.3)
+        self.eng.proc.wait(timeout=5)
         with self.assertRaises(EngineError):
             self.eng.call("echo", {}, timeout=1)
 
@@ -58,6 +58,8 @@ class EngineExitTest(unittest.TestCase):
         eng = FakeBinEngine("unused", on_exit=lambda: exits.append(True))
         eng.start()
         eng.notify("exit", {})
-        time.sleep(0.5)
+        deadline = time.time() + 5
+        while not exits and time.time() < deadline:
+            time.sleep(0.02)
         self.assertEqual(exits, [True])
         eng.stop()

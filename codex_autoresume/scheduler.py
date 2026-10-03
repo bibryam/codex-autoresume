@@ -85,7 +85,6 @@ class Scheduler:
                 w.set(params.get("turn") or {})
         elif method == "account/rateLimits/updated":
             self.limits = parse_limits({"rateLimits": params.get("rateLimits") or {}}, int(self.clock()))
-            self.limits_at = int(self.clock())
         elif method == "error":
             err = params.get("error") or {}
             self.log(f"engine error on thread {str(params.get('threadId'))[:13]}: {str(err.get('message', ''))[:120]}")
@@ -140,18 +139,26 @@ class Scheduler:
             self.blocked = self.finder(self.cfg.codex_home)
         except Exception as e:  # noqa: BLE001
             self.log(f"detector failed: {e}")
+        if not self.dry_run:
+            self._clear_stale_pending()
+        started = None
+        with self._lock:
+            self.plan = build_plan(self.blocked, self.limits if self.limits_ok else None, self.state, self.cfg, now, self.running)
+            nxt = self.plan.next_action
+            if nxt and self.running is None and not self.dry_run:
+                started = self._start_delivery(nxt)
+        if started is not None:
+            self.notify("codex-autoresume", f"Resuming: {started.title[:80]}")
+        self.last_tick = now
+
+    def _clear_stale_pending(self) -> None:
+        """Drop the pending-in-app flag once the thread is gone or a newer turn ran since we queued."""
         last_turn = {b.thread_id: b.last_turn_id for b in self.blocked}
         for tid, t in list(self.state.data["threads"].items()):
             if not t.get("pending_in_app_at"):
                 continue
             if tid not in last_turn or (t.get("pending_turn_id") and last_turn[tid] != t["pending_turn_id"]):
-                self.state.set_pending_in_app(tid, None)  # gone, or a newer turn ran since we queued
-        with self._lock:
-            self.plan = build_plan(self.blocked, self.limits if self.limits_ok else None, self.state, self.cfg, now, self.running)
-            nxt = self.plan.next_action
-            if nxt and self.running is None and not self.dry_run:
-                self._start_delivery(nxt)
-        self.last_tick = now
+                self.state.set_pending_in_app(tid, None)
 
     def _read_models(self) -> list[dict]:
         """Models the account can use, with their reasoning efforts (for the Edit form)."""
@@ -169,17 +176,19 @@ class Scheduler:
                         "efforts": [e for e in efforts if e], "default_effort": m.get("defaultReasoningEffort")})
         return out
 
-    def _start_delivery(self, entry) -> None:
+    def _start_delivery(self, entry):
+        """Called under the lock; returns the entry so the caller can notify outside the lock."""
         now = int(self.clock())
         self.running = entry.thread_id
         self.state.record_attempt(entry.thread_id, now)
         self.state.set_resume_now(entry.thread_id, False)
+        self.state.set_force(entry.thread_id, False)  # Schedule / Now are one-shot
         self.state.add_history(now, entry.thread_id, "resuming", f"{entry.message!r} ({entry.title[:60]})")
         self.log(f"resuming thread {entry.thread_id[:13]} with {entry.message!r}")
-        self.notify("codex-autoresume", f"Resuming: {entry.title[:80]}")
         self._worker = threading.Thread(target=self._deliver, args=(entry,), daemon=True, name="codex-autoresume-deliver")
         self._worker.start()
         self._replan()
+        return entry
 
     def _deliver(self, entry) -> None:
         outcome: Outcome
@@ -228,11 +237,13 @@ class Scheduler:
         self._replan()
 
     def resume_now(self, tid: str) -> None:
+        if tid == self.running:
+            return
         self.state.set_resume_now(tid, True)
         self.state.set_pending_in_app(tid, None)
         self.state.set_skip(tid, False)
         self.state.add_history(int(self.clock()), tid, "resume-now")
-        self.tick()
+        threading.Thread(target=self.tick, daemon=True, name="codex-autoresume-now").start()
 
     def _replan(self) -> None:
         with self._lock:

@@ -43,6 +43,7 @@ const fmtT=s=>s?new Date(s*1000).toLocaleString([], {weekday:'short',hour:'2-dig
 const rel=(s,now)=>{if(!s)return'';const d=s-now;const a=Math.abs(d);const m=Math.round(a/60);const t=m<60?m+' min':(Math.round(a/360)/10)+' h';return d>=0?'in '+t:t+' ago'};
 const esc=t=>(t||'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 async function post(p,b){await fetch(p,{method:'POST',headers:{'Content-Type':'application/json'},body:b?JSON.stringify(b):null});load()}
+function act(id,action,body){return post('/api/threads/'+encodeURIComponent(id)+'/'+action,body)}
 function gauge(name,w,now){if(!w)return`<div class="gauge"><b>${name}</b><div class="bar"><i style="width:0"></i></div><span>unknown</span></div>`;
  const c=w.used_percent>=100?'bad':(w.used_percent>=80?'warn':'');return`<div class="gauge"><b>${name}</b><div class="bar ${c}"><i style="width:${Math.min(100,w.used_percent)}%"></i></div><span>${w.used_percent}% used · resets ${fmtT(w.resets_at)} (${rel(w.resets_at,now)})</span></div>`}
 function resumeCell(e,now){
@@ -59,23 +60,23 @@ function resumeCell(e,now){
   case 'weekly-guard': return `<span class="no">No · weekly guard</span><div class="reason">${esc(e.reason)}. Press Schedule to resume anyway.</div>`;
   default: return `<span class="no">${esc(e.state)}</span><div class="reason">${esc(e.reason)}</div>`;
  }}
-function row(e,now){const parked=['skipped','automation','max-attempts','weekly-guard'].includes(e.state);const id=esc(JSON.stringify(e.thread_id));const tid=encodeURIComponent(e.thread_id);
+function row(e,now){const parked=['skipped','automation','max-attempts','weekly-guard'].includes(e.state);const id=esc(JSON.stringify(e.thread_id));
  return`<tr><td><b>${esc(e.cwd.split('/').pop())}</b><div class="ask" title="${esc(e.title)}">${esc(e.title)}</div></td>
  <td><div class="ask" title="${esc(e.last_user_message)}">${esc(e.last_user_message)}</div></td>
  <td>${fmtT(e.blocked_at)}<div class="reason">${rel(e.blocked_at,now)}</div></td>
  <td>${resumeCell(e,now)}${e.last_result?`<div class="reason" title="${esc(e.last_result)}">last run: ${esc(e.last_result)}</div>`:''}</td>
  <td><code>${esc(e.message)}</code><div class="reason">${esc(e.model||'thread default')} · ${esc(e.effort||'default effort')}</div></td>
  <td style="white-space:nowrap">${parked
-   ? `<button class="primary" onclick="post('/api/threads/${tid}/schedule')">Schedule</button><button disabled title="already not resuming">Skip</button>`
-   : `<button class="danger" onclick="post('/api/threads/${tid}/skip')">Skip</button>`}
- <button onclick="post('/api/threads/${tid}/resume-now')" title="resume immediately, ignoring the window and guards">Now</button>
+   ? `<button class="primary" onclick="act(${id},'schedule')">Schedule</button><button disabled title="already not resuming">Skip</button>`
+   : `<button class="danger" onclick="act(${id},'skip')">Skip</button>`}
+ ${e.state==='running'?'':`<button onclick="act(${id},'resume-now')" title="resume immediately, ignoring the window and guards">Now</button>`}
  <button onclick="startEdit(${id})">${editing===e.thread_id?'Close':'Edit'}</button></td></tr>${editing===e.thread_id?editRow(e):''}`}
 let editing=null;
 function startEdit(id){editing=(editing===id)?null:id;load(true)}
 let MODELS=[];
 function modelOptions(sel){const ids=MODELS.map(m=>m.id);const extra=sel&&!ids.includes(sel)?[{id:sel,display:sel+' (from thread)',efforts:[]}]:[];
  return [...extra,...MODELS].map(m=>`<option value="${esc(m.id)}" ${m.id===sel?'selected':''}>${esc(m.display)}</option>`).join('')}
-function effortOptions(modelId,sel){const m=MODELS.find(x=>x.id===modelId);let efforts=m&&m.efforts.length?m.efforts.slice():['low','medium','high','xhigh','max','ultra'];
+function effortOptions(modelId,sel){const m=MODELS.find(x=>x.id===modelId);let efforts=m&&m.efforts.length?m.efforts.slice():['low','medium','high','xhigh'];
  if(sel&&!efforts.includes(sel))efforts.unshift(sel);return efforts.map(x=>`<option value="${esc(x)}" ${x===sel?'selected':''}>${esc(x)}</option>`).join('')}
 function onModelChange(selEl){const form=selEl.form;const m=MODELS.find(x=>x.id===selEl.value);form.effort.innerHTML=effortOptions(selEl.value,m?m.default_effort:form.effort.value)}
 function editRow(e){return`<tr class="editrow"><td colspan="6"><form class="editform" onsubmit="return saveEdit(event,${esc(JSON.stringify(e.thread_id))})">
@@ -84,10 +85,10 @@ function editRow(e){return`<tr class="editrow"><td colspan="6"><form class="edit
  <div><label>Reasoning effort (thread: ${esc(e.effort||'default')})</label><select name="effort">${effortOptions(e.model,e.effort)}</select></div>
  <div><button class="primary" type="submit">Save</button><button type="button" onclick="startEdit(${esc(JSON.stringify(e.thread_id))})">Cancel</button></div></form></td></tr>`}
 async function saveEdit(ev,id){ev.preventDefault();const f=new FormData(ev.target);editing=null;
- await post('/api/threads/'+id+'/message',{message:f.get('message'),model:(f.get('model')||'').trim()||null,effort:(f.get('effort')||'').trim()||null});return false}
+ await act(id,'message',{message:f.get('message'),model:(f.get('model')||'').trim()||null,effort:(f.get('effort')||'').trim()||null});return false}
 async function load(force){if(editing&&!force)return;try{const s=await(await fetch('/api/state')).json();const now=s.now;MODELS=s.models||[];
  document.getElementById('sub').textContent=`engine: ${s.engine} · updated ${new Date().toLocaleTimeString()} · ${s.config.approvals} approvals · weekly guard ${s.config.weekly_guard}% · max ${s.config.max_attempts}/day${s.note?' · '+s.note:''}`;
- const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${L.plan||'?'} · read ${fmtT(L.fetched_at)}${s.limits_stale?' · STALE (engine down)':''}</div>`;
+ const L=s.limits||{};document.getElementById('limits').innerHTML=gauge('5h window',L.primary,now)+gauge('weekly',L.secondary,now)+`<div class="sub" style="margin:6px 0 0">usage allowed: ${L.allowed===true?'yes':(L.allowed===false?'no':'unknown')} · plan ${esc(L.plan||'?')} · read ${fmtT(L.fetched_at)}${s.limits_stale?' · STALE (engine down)':''}</div>`;
  document.getElementById('threads').innerHTML=s.entries.length?`<table><colgroup><col style="width:19%"><col style="width:20%"><col style="width:9%"><col style="width:23%"><col style="width:12%"><col style="width:17%"></colgroup><tr><th>Project / thread</th><th>Last ask</th><th>Blocked</th><th>Will it resume?</th><th>Message · model</th><th>Actions</th></tr>${s.entries.map(e=>row(e,now)).join('')}</table>`:'<div class="empty">No threads are blocked on the usage limit.</div>';
  document.getElementById('history').textContent=s.history.map(h=>`${fmtT(h.ts)}  ${(h.thread_id||'').slice(0,13).padEnd(13)}  ${h.event.padEnd(18)} ${h.detail||''}`).join('\n')||'nothing yet';
  document.getElementById('log').textContent=(s.log||[]).join('\n');}catch(e){document.getElementById('sub').textContent='daemon unreachable: '+e}}
@@ -141,7 +142,7 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
             tid, action = parts[2], parts[3]
             if not THREAD_ID.match(tid):
                 return self._json(400, {"error": "bad thread id"})
-            known = getattr(scheduler, "known_threads", lambda: None)()
+            known = scheduler.known_threads()
             if known is not None and tid not in known:
                 return self._json(404, {"error": "unknown thread"})
             try:
@@ -153,8 +154,6 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
             raw = self.rfile.read(length) if length else b""
             if action == "skip":
                 scheduler.set_skip(tid, True)
-            elif action == "unskip":
-                scheduler.set_skip(tid, False)
             elif action == "schedule":
                 scheduler.schedule(tid)
             elif action == "resume-now":
@@ -166,7 +165,11 @@ def make_server(scheduler, host: str = "127.0.0.1", port: int = 8765) -> Threadi
                     body = None
                 if not isinstance(body, dict) or not isinstance(body.get("message"), str) or not body["message"].strip():
                     return self._json(400, {"error": "message required"})
-                scheduler.set_message(tid, body["message"], body.get("model") or None, body.get("effort") or None)
+                model, effort = body.get("model") or None, body.get("effort") or None
+                for value in (model, effort):
+                    if value is not None and (not isinstance(value, str) or len(value) > 64):
+                        return self._json(400, {"error": "model and effort must be short strings"})
+                scheduler.set_message(tid, body["message"][:4000], model, effort)
             else:
                 return self._json(404, {"error": "unknown action"})
             self._json(200, {"ok": True})

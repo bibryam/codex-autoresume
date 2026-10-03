@@ -90,7 +90,7 @@ def build_plan(blocked: list[Blocked], limits: Limits | None, state: State, cfg:
             kind = "running"
         elif st["skip"]:
             kind = "skipped"
-        elif not (st["resume_now"] or st["force"]) and (b.is_automation or b.last_user_message.lstrip().startswith("<heartbeat>")):
+        elif not (st["resume_now"] or st["force"]) and b.is_automation:
             kind = "automation"
             reason = "scheduled automation thread; it will run again on its own schedule"
         elif st["pending_in_app_at"]:

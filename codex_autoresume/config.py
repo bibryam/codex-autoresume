@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,5 +35,6 @@ class Config:
         if not Path(cfg.codex_bin).exists():
             found = shutil.which("codex")
             if found:
+                print(f"codex binary {cfg.codex_bin} not found; using {found}", file=sys.stderr)
                 cfg.codex_bin = found
         return cfg

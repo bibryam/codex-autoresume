@@ -50,3 +50,9 @@ class LimitsTest(unittest.TestCase):
     def test_reset_hint_absent(self):
         self.assertIsNone(parse_reset_hint("some other error", 0))
         self.assertIsNone(parse_reset_hint("", 0))
+
+
+class AllowedFlagTest(unittest.TestCase):
+    def test_missing_reached_type_key_means_unknown_not_allowed(self):
+        lim = parse_limits({"rateLimits": {"primary": {"usedPercent": 10, "resetsAt": 5}}}, now=1)
+        self.assertIsNone(lim.allowed)

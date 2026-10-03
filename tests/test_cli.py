@@ -3,16 +3,17 @@ from codex_autoresume.__main__ import build_plist, format_status
 
 class CliTest(unittest.TestCase):
     def test_plist_contents(self):
-        p = build_plist("/usr/bin/python3", "/work", "/data")
-        self.assertIn("<string>/usr/bin/python3</string>", p)
-        self.assertIn("<string>codex_autoresume</string>", p)
-        self.assertIn("<key>WorkingDirectory</key>\n    <string>/work</string>", p)
-        self.assertIn("/data/daemon.log", p)
-        self.assertIn("<key>KeepAlive</key>", p)
+        import plistlib
+        d = plistlib.loads(build_plist("/usr/bin/python3", "/work & co", "/data").encode())
+        self.assertEqual(d["ProgramArguments"], ["/usr/bin/python3", "-m", "codex_autoresume", "run"])
+        self.assertEqual(d["WorkingDirectory"], "/work & co")
+        self.assertEqual(d["StandardOutPath"], "/data/daemon.log")
+        self.assertTrue(d["KeepAlive"] and d["RunAtLoad"])
 
     def test_plist_carries_install_time_path(self):
-        p = build_plist("/usr/bin/python3", "/work", "/data", path="/Users/me/.nvm/bin:/opt/homebrew/bin")
-        self.assertIn("<string>/Users/me/.nvm/bin:/opt/homebrew/bin</string>", p)
+        import plistlib
+        d = plistlib.loads(build_plist("/usr/bin/python3", "/work", "/data", path="/Users/me/.nvm/bin:/opt/homebrew/bin").encode())
+        self.assertEqual(d["EnvironmentVariables"]["PATH"], "/Users/me/.nvm/bin:/opt/homebrew/bin")
 
     def test_format_status(self):
         snap = {"now": 100, "engine": "ok", "note": "", "limits": {"primary": {"used_percent": 100, "resets_at": 160, "window_minutes": 300}, "secondary": {"used_percent": 20, "resets_at": 900, "window_minutes": 10080}, "allowed": False, "plan": "plus", "fetched_at": 100},
@@ -28,10 +29,15 @@ class SignalTest(unittest.TestCase):
     def test_sigterm_raises_keyboard_interrupt(self):
         import os, signal
         from codex_autoresume.__main__ import install_signal_handlers
+        previous = signal.getsignal(signal.SIGTERM)
         install_signal_handlers()
-        with self.assertRaises(KeyboardInterrupt):
-            os.kill(os.getpid(), signal.SIGTERM)
-            import time; time.sleep(0.2)
+        try:
+            with self.assertRaises(KeyboardInterrupt):
+                os.kill(os.getpid(), signal.SIGTERM)
+                signal.sigtimedwait([], 0.5) if hasattr(signal, "sigtimedwait") else None
+                import time; time.sleep(0.2)
+        finally:
+            signal.signal(signal.SIGTERM, previous)
 
 
 class InstallPathTest(unittest.TestCase):
