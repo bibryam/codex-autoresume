@@ -3,6 +3,8 @@
 Continues Codex threads in the ChatGPT desktop app after a usage-limit reset,
 so you do not have to come back and type "continue" yourself.
 
+![codex-autoresume page with two threads scheduled to resume and one automation thread parked](docs/screenshot.jpg)
+
 ## Run it
 
 Background (recommended):
