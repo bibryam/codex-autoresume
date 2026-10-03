@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse
 import os
+import signal
 import subprocess
 import sys
 import threading
@@ -73,11 +74,18 @@ def build_plist(python: str, workdir: str, data_dir: str) -> str:
 """
 
 
+def install_signal_handlers() -> None:
+    def _stop(signum, frame):
+        raise KeyboardInterrupt
+    signal.signal(signal.SIGTERM, _stop)
+
+
 def _plist_path() -> Path:
     return Path.home() / "Library" / "LaunchAgents" / f"{LABEL}.plist"
 
 
 def cmd_run(cfg: Config) -> None:
+    install_signal_handlers()
     Path(cfg.data_dir).mkdir(parents=True, exist_ok=True)
     sched = Scheduler(cfg, State(Path(cfg.data_dir) / "state.json"))
     server = make_server(sched, port=cfg.port)

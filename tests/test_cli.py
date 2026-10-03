@@ -18,3 +18,13 @@ class CliTest(unittest.TestCase):
         self.assertIn("5h window 100%", out)
         self.assertIn("cleverplayhouse", out)
         self.assertIn("scheduled #1", out)
+
+
+class SignalTest(unittest.TestCase):
+    def test_sigterm_raises_keyboard_interrupt(self):
+        import os, signal
+        from codex_resume.__main__ import install_signal_handlers
+        install_signal_handlers()
+        with self.assertRaises(KeyboardInterrupt):
+            os.kill(os.getpid(), signal.SIGTERM)
+            import time; time.sleep(0.2)
